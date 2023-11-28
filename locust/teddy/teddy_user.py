@@ -2,7 +2,7 @@ import functools
 import time
 from typing import Type, Union, Dict
 
-from . import teddy_logger
+from . import teddy_logger, TeddySession
 from ..user.users import UserMeta, User
 
 from .teddy_exception import TeddyException
@@ -80,9 +80,11 @@ class TeddyUser(User, metaclass=TeddyUserMeta):
 
     def __init__(self, environment):
         super().__init__(environment)
+        self._user_id: int = self._gen_user_id()
+        self._user_name: str = ''
         self._user_logic_id = 0
-        self._user_id = self._gen_user_id()
-        self._taskset_instance = TeddyTopTaskSet(self)
+        self._session: TeddySession | None = None
+        self._taskset_instance: TeddyTopTaskSet = TeddyTopTaskSet(self)
 
     @property
     def user_id(self):
@@ -90,17 +92,38 @@ class TeddyUser(User, metaclass=TeddyUserMeta):
         return self._user_id
 
     @property
-    def user_logic_id(self):
+    def user_name(self) -> str:
+        """获取用户名(业务层使用, 不需要保证唯一, 空时将不建立索引)"""
+        return self._user_name
+
+    @user_name.setter
+    def user_name(self, new_user_name: str) -> None:
+        """设置用户名"""
+        if new_user_name == self._user_name:
+            return
+
+        old_user_name = self._user_name
+        self._user_name = new_user_name
+        teddy_user_mgr._on_update_user_name(self, old_user_name)
+
+    @property
+    def user_logic_id(self) -> int:
+        """取得logic user Id(业务层使用, 不需要保证唯一, 空时将不建立索引)"""
         return self._user_logic_id
 
     @user_logic_id.setter
-    def user_logic_id(self, new_user_logic_id):
+    def user_logic_id(self, new_user_logic_id: int) -> None:
         if new_user_logic_id == self._user_logic_id:
             return
 
         old_user_logic_id = self._user_logic_id
         self._user_logic_id = new_user_logic_id
         teddy_user_mgr._on_update_user_logic_id(self, old_user_logic_id)
+
+    @property
+    def session(self) -> TeddySession:
+        """取得会话对象"""
+        return self._session
 
     @property
     def tasksets(self) -> [TeddyTaskSet]:
@@ -123,4 +146,4 @@ class TeddyUser(User, metaclass=TeddyUserMeta):
         return self._taskset_instance.get_taskset(taskset_cls_or_name)
 
     def __str__(self):
-        return f'{self.__class__.__name__}[{self._state}, {self._user_id}|{self._user_logic_id}]'
+        return f'{self.__class__.__name__}[{self._state}, {self._user_id}|{self._user_name}|{self._user_logic_id}]'

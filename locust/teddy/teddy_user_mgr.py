@@ -7,6 +7,7 @@ class TeddyUserMgr:
     """
     def __init__(self):
         self._user_id_2_users = {}
+        self._user_name_2_users = {}
         self._user_logic_id_2_users = {}
 
     @property
@@ -32,9 +33,22 @@ class TeddyUserMgr:
         del self._user_id_2_users[user.user_id]
         self.__remove_user_from_logic_id_dict(user.user_logic_id, user.user_id)
 
+    def _on_update_user_name(self, user, old_user_name):
+        teddy_logger.debug(f'Update user name, user: {user}, '
+                           f'old_user_name: {old_user_name}')
+
+        self.__remove_user_from_user_name_dict(old_user_name, user.user_id)
+        if user.user_name:
+            user_name_users = self._user_name_2_users.get(user.user_name)
+            if user_name_users is None:
+                user_name_users = {}
+                self._user_name_2_users[user.user_name] = user_name_users
+            user_name_users[user.user_name] = user
+
     def _on_update_user_logic_id(self, user, old_user_logic_id):
-        teddy_logger.info(f'Update user logic id, user: {user}, '
-                          f'old_user_logic_id: {old_user_logic_id}')
+        teddy_logger.debug(f'Update user logic id, user: {user}, '
+                           f'old_user_logic_id: {old_user_logic_id}')
+
         self.__remove_user_from_logic_id_dict(old_user_logic_id, user.user_id)
         if user.user_logic_id != 0:
             logic_id_users = self._user_logic_id_2_users.get(user.user_logic_id)
@@ -42,6 +56,19 @@ class TeddyUserMgr:
                 logic_id_users = {}
                 self._user_logic_id_2_users[user.user_logic_id] = logic_id_users
             logic_id_users[user.user_id] = user
+
+    def __remove_user_from_user_name_dict(self, user_name, user_id):
+        if (not user_name or
+                user_name not in self._user_name_2_users):
+            return
+
+        user_name_users = self._user_name_2_users[user_name]
+        if user_id not in user_name_users:
+            return
+
+        del user_name_users[user_id]
+        if not user_name_users:
+            del self._user_name_2_users[user_name]
 
     def __remove_user_from_logic_id_dict(self, user_logic_id, user_id):
         if (user_logic_id == 0 or

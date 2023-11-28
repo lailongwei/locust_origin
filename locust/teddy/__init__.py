@@ -12,6 +12,9 @@ from .teddy_task import (
     TeddyTaskSet,
     teddy_task,
     teddy_taskset)
+from .teddy_session import (
+    TeddySessionState,
+    TeddySession)
 from .teddy_user import TeddyUser
 from .teddy_user_mgr import teddy_user_mgr
 
