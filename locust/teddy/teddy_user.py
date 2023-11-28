@@ -108,11 +108,12 @@ class TeddyUser(User, metaclass=TeddyUserMeta):
 
     @property
     def user_logic_id(self) -> int:
-        """取得logic user Id(业务层使用, 不需要保证唯一, 空时将不建立索引)"""
+        """取得user logic id(业务层使用, 不需要保证唯一, 空时将不建立索引)"""
         return self._user_logic_id
 
     @user_logic_id.setter
     def user_logic_id(self, new_user_logic_id: int) -> None:
+        """更新logic id"""
         if new_user_logic_id == self._user_logic_id:
             return
 

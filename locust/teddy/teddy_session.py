@@ -1,34 +1,25 @@
 class TeddySessionState:
     """Teddy会话状态"""
-    Disconnected = 0
-    Connecting = 1
-    Connected = 2
-    Reconnecting = 3
-
-    @classmethod
-    def get_state_desc(cls, session_state: int) -> str:
-        """
-        取得传话状态描述
-        :param session_state: 会话状态
-        :return: 会话状态描述
-        """
-        if session_state == cls.Disconnected:
-            return 'Disconnected'
-        elif session_state == cls.Connecting:
-            return 'Connecting'
-        elif session_state == cls.Connected:
-            return 'Connected'
-        elif session_state == cls.Reconnecting:
-            return 'Reconnecting'
-        else:
-            return f'UknSessionState{session_state}'
+    Disconnected = 'Disconnected'
+    Connecting = 'Connecting'
+    Connected = 'Connected'
+    Reconnecting = 'Reconnecting'
 
 
 class TeddySession:
     """Teddy会话对象"""
-    def __init__(self):
-        self._session_id: int = 0
-        self._session_state: int = TeddySessionState.Disconnected
+    _max_session_id = 0
+    def __init__(self, user):
+        self._user = user
+
+        self.__class__._max_session_id += 1
+        self._session_id = self.__class__._max_session_id
+        self._session_state: str = TeddySessionState.Disconnected
+
+    @property
+    def user(self):
+        """获得所属User对象"""
+        return self._user
 
     @property
     def session_id(self):
@@ -36,7 +27,7 @@ class TeddySession:
         return self._session_id
 
     @property
-    def session_state(self) -> int:
+    def session_state(self) -> str:
         """传话状态"""
         return self._session_state
 
@@ -69,5 +60,4 @@ class TeddySession:
         raise NotImplemented()
 
     def __str__(self):
-        return (f'{self.__class__.__name__}[f{self._session_id}, '
-                f'{TeddySessionState.get_state_desc(self._session_state)}]')
+        return f'{self.__class__.__name__}[{self._session_id}, {self._session_state}]'
