@@ -4,6 +4,18 @@ Changelog Highlights
 
 For full details of the Locust changelog, please see https://github.com/locustio/locust/blob/master/CHANGELOG.md
 
+2.19.1
+======
+* Create any directories as part of the CSV Prefix https://github.com/locustio/locust/pull/2481
+* Dont suppress StopUser or GreenletExit in on_stop https://github.com/locustio/locust/pull/2486
+* FastHttpUser: Detect response text encoding when no information is present in headers https://github.com/locustio/locust/pull/2485
+
+2.19.0
+======
+* Add --processes parameter to automatically fork subprocesses for workers https://github.com/locustio/locust/pull/2472
+* Automatically shut down workers if master goes missing for too long https://github.com/locustio/locust/pull/2474
+* Update minimum version of various dependencies https://github.com/locustio/locust/pull/2476
+
 2.18.4
 ======
 * Various fixes to Modern UI

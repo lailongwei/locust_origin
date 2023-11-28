@@ -6,6 +6,7 @@ import sys
 import platform
 import unittest
 import socket
+import psutil
 import pty
 import signal
 import subprocess
@@ -71,9 +72,9 @@ class StandaloneIntegrationTests(ProcessIntegrationTest):
             timeout=5,
             text=True,
         ).strip()
-        self.assertTrue(output.startswith("Usage: locust [OPTIONS] [UserClass ...]"))
+        self.assertTrue(output.startswith("Usage: locust [options] [UserClass"))
         self.assertIn("Common options:", output)
-        self.assertIn("-f LOCUSTFILE, --locustfile LOCUSTFILE", output)
+        self.assertIn("-f <filename>, --locustfile <filename>", output)
         self.assertIn("Logging options:", output)
         self.assertIn("--skip-log-setup      Disable Locust's logging setup.", output)
 
@@ -1833,7 +1834,7 @@ class AnyUser(HttpUser):
 
     def test_processes_ctrl_c(self):
         with mock_locustfile() as mocked:
-            proc = subprocess.Popen(
+            proc = psutil.Popen(  # use psutil.Popen instead of subprocess.Popen to use extra features
                 [
                     "locust",
                     "-f",
@@ -1849,13 +1850,22 @@ class AnyUser(HttpUser):
                 text=True,
             )
             gevent.sleep(3)
+            children = proc.children(recursive=True)
+            self.assertEqual(len(children), 4, "unexpected number of child worker processes")
+
             proc.send_signal(signal.SIGINT)
+            gevent.sleep(2)
+
+            for child in children:
+                self.assertFalse(child.is_running(), "child processes failed to terminate")
+
             try:
-                _, stderr = proc.communicate(timeout=3)
+                _, stderr = proc.communicate(timeout=1)
             except Exception:
                 proc.kill()
                 _, stderr = proc.communicate()
                 assert False, f"locust process never finished: {stderr}"
+
             self.assertNotIn("Traceback", stderr)
             self.assertIn("(index 3) reported as ready", stderr)
             self.assertIn("The last worker quit, stopping test", stderr)
@@ -1915,3 +1925,71 @@ class AnyUser(HttpUser):
 
             self.assertNotIn("Traceback", worker_stderr)
             self.assertIn("Didn't get heartbeat from master in over ", worker_stderr)
+
+    def test_processes_error_doesnt_blow_up_completely(self):
+        with mock_locustfile() as mocked:
+            proc = subprocess.Popen(
+                [
+                    "locust",
+                    "-f",
+                    mocked.file_path,
+                    "--processes",
+                    "4",
+                    "-L",
+                    "DEBUG",
+                    "UserThatDoesntExist",
+                ],
+                stdout=PIPE,
+                stderr=PIPE,
+                text=True,
+            )
+            _, stderr = proc.communicate()
+            self.assertIn("Unknown User(s): UserThatDoesntExist", stderr)
+            # the error message should repeat 4 times for the workers and once for the master
+            self.assertEqual(stderr.count("Unknown User(s): UserThatDoesntExist"), 5)
+            self.assertNotIn("Traceback", stderr)
+
+    def test_processes_workers_quit_unexpected(self):
+        content = """
+from locust import runners, events, User
+import sys
+
+@events.test_start.add_listener
+def on_test_start(environment, **_kwargs):
+    if isinstance(environment.runner, runners.WorkerRunner):
+        sys.exit(42)
+
+class AnyUser(User):
+    pass
+"""
+        with mock_locustfile(content=content) as mocked:
+            worker_proc = subprocess.Popen(
+                ["locust", "-f", mocked.file_path, "--processes", "2", "--worker"],
+                stdout=PIPE,
+                stderr=PIPE,
+                text=True,
+            )
+            master_proc = subprocess.Popen(
+                ["locust", "-f", mocked.file_path, "--master", "--headless", "-t", "5"],
+                stdout=PIPE,
+                stderr=PIPE,
+                text=True,
+            )
+            try:
+                _, stderr = worker_proc.communicate(timeout=3)
+                status_code = worker_proc.wait()
+            except Exception:
+                worker_proc.kill()
+                _, stderr = worker_proc.communicate()
+                assert False, f"worker process never finished: {stderr}"
+            finally:
+                gevent.sleep(4)
+                master_proc.kill()
+                _, master_stderr = master_proc.communicate()
+
+            self.assertNotIn("Traceback", stderr)
+            self.assertIn("INFO/locust.runners: sys.exit(42) called", stderr)
+            if sys.version_info >= (3, 9):
+                self.assertEqual(status_code, 42)
+            self.assertNotIn("Traceback", master_stderr)
+            self.assertIn("failed to send heartbeat, setting state to missing", master_stderr)

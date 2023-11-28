@@ -59,7 +59,7 @@ Example:
     headless = true
     master = true
     expect-workers = 5
-    host = http://target-system
+    host = https://target-system
     users = 100
     spawn-rate = 10
     run-time = 10m
@@ -67,7 +67,7 @@ Example:
 
 .. code-block:: console
 
-    $ locust --config=master.conf
+    $ locust --config master.conf
 
 .. note::
 

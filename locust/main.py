@@ -1,3 +1,4 @@
+import errno
 import logging
 import os
 import signal
@@ -168,12 +169,21 @@ def main():
 
     if options.processes:
         if os.name == "nt":
-            raise Exception("--processes is not supported in Windows (except in WSL)")
+            sys.stderr.write("--processes is not supported in Windows (except in WSL)\n")
+            sys.exit(1)
         if options.processes == -1:
             options.processes = os.cpu_count()
-            assert options.processes, "couldnt detect number of cpus!?"
+            if not options.processes:
+                sys.stderr.write("--processes failed to detect number of cpus!?\n")
+                sys.exit(1)
         elif options.processes < -1:
-            raise Exception(f"invalid processes count {options.processes}")
+            sys.stderr.write(f"Invalid --processes count {options.processes}\n")
+            sys.exit(1)
+        elif options.master:
+            sys.stderr.write(
+                "--master cannot be combined with --processes. Remove --master, as it is implicit as long as --worker is not set.\n"
+            )
+            sys.exit(1)
         for _ in range(options.processes):
             child_pid = gevent.fork()
             if child_pid:
@@ -210,7 +220,7 @@ def main():
                 for child_pid in children:
                     _, child_status = os.waitpid(child_pid, 0)
                     try:
-                        if sys.version_info > (3, 8):
+                        if sys.version_info >= (3, 9):
                             child_exit_code = os.waitstatus_to_exitcode(child_status)
                             exit_code = max(exit_code, child_exit_code)
                     except AttributeError:
@@ -222,23 +232,45 @@ def main():
 
                 def kill_workers(children):
                     exit_code = 0
-                    logging.debug("Sending SIGINT to children")
+                    start_time = time.time()
+                    # give children some time to finish up (in case they had an error parsing arguments etc)
+                    for child_pid in children[:]:
+                        while time.time() < start_time + 3:
+                            try:
+                                _, child_status = os.waitpid(child_pid, os.WNOHANG)
+                                children.remove(child_pid)
+                                try:
+                                    if sys.version_info >= (3, 9):
+                                        child_exit_code = os.waitstatus_to_exitcode(child_status)
+                                        exit_code = max(exit_code, child_exit_code)
+                                except AttributeError:
+                                    pass  # dammit python 3.8...
+                            except OSError as e:
+                                if e.errno == errno.EINTR:
+                                    time.sleep(0.1)
+                                else:
+                                    logging.error(traceback.format_exc())
+                            else:
+                                break
                     for child_pid in children:
                         try:
+                            logging.debug(f"Sending SIGINT to child with pid {child_pid}")
                             os.kill(child_pid, signal.SIGINT)
                         except ProcessLookupError:
                             pass  # never mind, process was already dead
-                    logging.debug("waiting for children to terminate")
                     for child_pid in children:
                         _, child_status = os.waitpid(child_pid, 0)
                         try:
-                            if sys.version_info > (3, 8):
+                            if sys.version_info >= (3, 9):
                                 child_exit_code = os.waitstatus_to_exitcode(child_status)
                                 exit_code = max(exit_code, child_exit_code)
                         except AttributeError:
                             pass  # dammit python 3.8...
                     if exit_code > 1:
-                        logging.error(f"bad response code from worker children: {exit_code}")
+                        logging.error(f"Bad response code from worker children: {exit_code}")
+                    # ensure master doesnt finish until output from workers has arrived
+                    # otherwise the terminal might look weird.
+                    time.sleep(0.1)
 
                 atexit.register(kill_workers, children)
 
@@ -293,7 +325,7 @@ It's not high enough for load testing, and the OS didn't allow locust to increas
 See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-number-of-open-files-limit for more info."""
             )
 
-    if sys.version_info <= (3, 9):
+    if sys.version_info < (3, 9):
         logger.info("Python 3.8 support is deprecated and will be removed soon")
 
     # create locust Environment
@@ -368,6 +400,10 @@ See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-numb
             sys.exit(1)
 
     if options.csv_prefix:
+        base_csv_file = os.path.basename(options.csv_prefix)
+        base_csv_dir = options.csv_prefix[: -len(base_csv_file)]
+        if not os.path.exists(base_csv_dir) and len(base_csv_dir) != 0:
+            os.makedirs(base_csv_dir)
         stats_csv_writer = StatsCSVFileWriter(
             environment, stats.PERCENTILES_TO_REPORT, options.csv_prefix, options.stats_history_enabled
         )
@@ -391,6 +427,8 @@ See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-numb
                     "Starting web interface at %s://0.0.0.0:%s (accepting connections from all network interfaces)"
                     % (protocol, options.web_port)
                 )
+            if options.web_auth:
+                logging.info("BasicAuth support is deprecated, it will be removed in a future release.")
             web_ui = environment.create_web_ui(
                 host=web_host,
                 port=options.web_port,
