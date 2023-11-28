@@ -142,7 +142,8 @@ class User(metaclass=UserMeta):
     @final
     def run(self):
         self._state = LOCUST_STATE_RUNNING
-        self._taskset_instance = DefaultTaskSet(self)
+        if self._taskset_instance is None:
+            self._taskset_instance = DefaultTaskSet(self)
         try:
             # run the TaskSet on_start method, if it has one
             try:

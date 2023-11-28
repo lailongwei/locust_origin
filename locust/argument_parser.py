@@ -540,6 +540,15 @@ Only the LOCUSTFILE (-f option) needs to be specified when starting a Worker, si
         env_var="LOCUST_LOGFILE",
     )
 
+    teddy_group = parser.add_argument_group("Teddy extension options")
+    teddy_group.add_argument(
+        "--teddy-loglevel",
+        dest="teddy_loglevel",
+        default="DEBUG",
+        help="Teddy logger level, default is DEBUG.",
+        env_var='TEDDY_LOGLEVEL',
+    )
+
     other_group = parser.add_argument_group("Other options")
     other_group.add_argument(
         "--show-task-ratio",

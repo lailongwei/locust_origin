@@ -1,0 +1,61 @@
+from locust.teddy import teddy_logger
+
+
+class TeddyUserMgr:
+    """
+    Teddy User管理器封装
+    """
+    def __init__(self):
+        self._user_id_2_users = {}
+        self._user_logic_id_2_users = {}
+
+    @property
+    def user_id_2_users(self):
+        return self._user_id_2_users
+
+    @property
+    def user_logic_id_2_users(self):
+        return self._user_logic_id_2_users
+
+    def get_by_user_id(self, user_id: int):
+        return self._user_id_2_users.get(user_id)
+
+    def get_by_user_logic_id(self, user_logic_id: int):
+        return self._user_logic_id_2_users.get(user_logic_id)
+
+    def _on_user_start(self, user):
+        self._user_id_2_users[user.user_id] = user
+        teddy_logger.info(f'Add user: {user}')
+
+    def _on_user_stop(self, user):
+        teddy_logger.info(f'Remove user: {user}')
+        del self._user_id_2_users[user.user_id]
+        self.__remove_user_from_logic_id_dict(user.user_logic_id, user.user_id)
+
+    def _on_update_user_logic_id(self, user, old_user_logic_id):
+        teddy_logger.info(f'Update user logic id, user: {user}, '
+                          f'old_user_logic_id: {old_user_logic_id}')
+        self.__remove_user_from_logic_id_dict(old_user_logic_id, user.user_id)
+        if user.user_logic_id != 0:
+            logic_id_users = self._user_logic_id_2_users.get(user.user_logic_id)
+            if logic_id_users is None:
+                logic_id_users = {}
+                self._user_logic_id_2_users[user.user_logic_id] = logic_id_users
+            logic_id_users[user.user_id] = user
+
+    def __remove_user_from_logic_id_dict(self, user_logic_id, user_id):
+        if (user_logic_id == 0 or
+                user_logic_id not in self._user_logic_id_2_users):
+            return
+
+        logic_id_users = self._user_logic_id_2_users[user_logic_id]
+        if user_id not in logic_id_users:
+            return
+
+        del logic_id_users[user_id]
+        if not logic_id_users:
+            del self._user_logic_id_2_users[user_logic_id]
+
+
+"""Teddy user管理器唯一实例"""
+teddy_user_mgr = TeddyUserMgr()

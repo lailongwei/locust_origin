@@ -30,6 +30,8 @@ from .html import get_html_report
 from .util.load_locustfile import load_locustfile
 import traceback
 
+from .teddy import *
+
 try:
     # import locust_plugins if it is installed, to allow it to register custom arguments etc
     import locust_plugins  # pyright: ignore[reportMissingImports]
