@@ -35,6 +35,9 @@ __all__ = (
     "teddy_task",
     "teddy_taskset",
 
+    "TeddySessionState",
+    "TeddySession",
+
     "teddy_user",
 
     "teddy_user_mgr",
