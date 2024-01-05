@@ -1,3 +1,4 @@
+import os.path
 import logging
 import logging.config
 import socket
@@ -26,7 +27,7 @@ def setup_logging(loglevel, logfile=None):
         "disable_existing_loggers": False,
         "formatters": {
             "default": {
-                "format": f"[%(asctime)s] {HOSTNAME}/%(levelname)s/%(name)s: %(message)s",
+                "format": f"[%(asctime)s] {HOSTNAME}/%(levelname)-5s/%(name)s: %(message)s",
             },
             "plain": {
                 "format": "%(message)s",
@@ -45,18 +46,28 @@ def setup_logging(loglevel, logfile=None):
         },
         "loggers": {
             "locust": {
-                "handlers": ["console", "log_reader"],
+                "handlers": ["console"],
+                "level": loglevel,
+                "propagate": False,
+            },
+            "locust.teddy": {
+                "handlers": ["console"],
+                "level": loglevel,
+                "propagate": False,
+            },
+            "locust.network": {
+                "handlers": [],
                 "level": loglevel,
                 "propagate": False,
             },
             "locust.stats_logger": {
-                "handlers": ["console_plain", "log_reader"],
+                "handlers": ["console_plain"],
                 "level": "INFO",
                 "propagate": False,
             },
         },
         "root": {
-            "handlers": ["console", "log_reader"],
+            "handlers": ["console"],
             "level": loglevel,
         },
     }
@@ -64,12 +75,30 @@ def setup_logging(loglevel, logfile=None):
         # if a file has been specified add a file logging handler and set
         # the locust and root loggers to use it
         LOGGING_CONFIG["handlers"]["file"] = {
-            "class": "logging.FileHandler",
+            "class": "logging.handlers.RotatingFileHandler",
             "filename": logfile,
             "formatter": "default",
+            "mode": "a",
+            "maxBytes": 1024 * 1024 * 512,
+            "encoding": "utf-8",
+            "backupCount": 10
         }
-        LOGGING_CONFIG["loggers"]["locust"]["handlers"] = ["file", "log_reader"]
-        LOGGING_CONFIG["root"]["handlers"] = ["file", "log_reader"]
+
+        LOGGING_CONFIG["handlers"]["network_file"] = {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": os.path.splitext(logfile)[0] + '_network' + os.path.splitext(logfile)[1],
+            "formatter": "default",
+            "mode": "a",
+            "maxBytes": 1024 * 1024 * 512,
+            "encoding": "utf-8",
+            "backupCount": 10,
+            "delay": True
+        }
+
+        LOGGING_CONFIG["loggers"]["locust"]["handlers"] = ["console", "file"]
+        LOGGING_CONFIG["loggers"]["locust.teddy"]["handlers"] = ["console", "file"]
+        LOGGING_CONFIG["loggers"]["locust.network"]["handlers"] = ["console", "file"]
+        LOGGING_CONFIG["root"]["handlers"] = ["console", "file"]
 
     logging.config.dictConfig(LOGGING_CONFIG)
 

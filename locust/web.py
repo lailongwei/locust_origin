@@ -19,7 +19,8 @@ from gevent import pywsgi
 from .exception import AuthCredentialsError
 from .runners import MasterRunner, STATE_RUNNING, STATE_MISSING
 from .log import greenlet_exception_logger
-from .stats import StatsCSVFileWriter, StatsErrorDict, sort_stats
+from .stats import StatsCSVFileWriter, StatsErrorDict, sort_stats, sort_msg_stats, sort_msg_statuses, \
+    sort_paired_msg_stats
 from . import stats as stats_module, __version__ as version, argument_parser
 from .stats import StatsCSV
 from .user.inspectuser import get_ratio
@@ -280,6 +281,8 @@ class WebUI:
             if environment.runner is not None:
                 environment.runner.stats.reset_all()
                 environment.runner.exceptions = {}
+
+                environment.runner.msg_stats.reset_all()
             return "ok"
 
         @app.route("/stats/report")
@@ -360,11 +363,19 @@ class WebUI:
         @memoize(timeout=DEFAULT_CACHE_TIME, dynamic_timeout=True)
         def request_stats() -> Response:
             stats: List[Dict[str, Any]] = []
+            upstream_msg_stats: List[Dict[str, Any]] = []
+            downstream_msg_stats: List[Dict[str, Any]] = []
+            paired_msg_stats: List[Dict[str, Any]] = []
+            msg_statuses: List[Dict[str, Any]] = []
             errors: List[StatsErrorDict] = []
 
             if environment.runner is None:
                 report = {
                     "stats": stats,
+                    "upstream_msg_stats": upstream_msg_stats,
+                    "downstream_msg_stats": downstream_msg_stats,
+                    "paired_msg_stats": paired_msg_stats,
+                    "msg_statuses": msg_statuses,
                     "errors": errors,
                     "total_rps": 0.0,
                     "total_fail_per_sec": 0.0,
@@ -383,6 +394,18 @@ class WebUI:
             for s in chain(sort_stats(environment.runner.stats.entries), [environment.runner.stats.total]):
                 stats.append(s.to_dict())
 
+            msg_stats = environment.runner.msg_stats
+            for s in chain(sort_msg_stats(msg_stats.upstream_entries), [msg_stats.upstream_total]):
+                upstream_msg_stats.append(s.to_dict())
+            for s in chain(sort_msg_stats(msg_stats.downstream_entries), [msg_stats.downstream_total]):
+                downstream_msg_stats.append(s.to_dict())
+
+            for s in chain(sort_paired_msg_stats(msg_stats.paired_msg_entries), [msg_stats.paired_msg_total]):
+                paired_msg_stats.append(s.to_dict())
+
+            for s in chain(sort_msg_statuses(msg_stats.status_entries), [msg_stats.status_total]):
+                msg_statuses.append(s.to_dict())
+
             for e in environment.runner.errors.values():
                 err_dict = e.serialize()
                 err_dict["name"] = escape(err_dict["name"])
@@ -395,7 +418,14 @@ class WebUI:
             if len(stats) > 500:
                 truncated_stats += [stats[-1]]
 
-            report = {"stats": truncated_stats, "errors": errors[:500]}
+            report = {
+                "stats": truncated_stats,
+                "upstream_msg_stats": upstream_msg_stats,
+                "downstream_msg_stats": downstream_msg_stats,
+                'paired_msg_stats': paired_msg_stats,
+                "msg_statuses": msg_statuses,
+                "errors": errors[:500]
+            }
             total_stats = stats[-1]
 
             if stats:

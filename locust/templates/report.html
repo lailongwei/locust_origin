@@ -77,7 +77,8 @@
                             <td>{{ int(s.avg_response_time) }}</td>
                             <td>{{ int(s.min_response_time or 0) }}</td>
                             <td>{{ int(s.max_response_time) }}</td>
-                            <td>{{ int(s.avg_content_length) }}</td>
+                            <td>{{ int(s.avg_request_length) }}</td>
+                            <td>{{ int(s.avg_response_length) }}</td>
                             <td>{{ round(s.total_rps, 1) }}</td>
                             <td>{{ round(s.total_fail_per_sec, 1) }}</td>
                         </tr>

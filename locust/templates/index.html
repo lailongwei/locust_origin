@@ -171,6 +171,10 @@
             <ul class="tabs container">
                 <li><a href="#">Statistics</a></li>
                 <li><a href="#" class="chart-tab-link">Charts</a></li>
+                <li><a href="#">Upstream</a></li>
+                <li><a href="#">Downstream</a></li>
+                <li><a href="#">Paired Messages</a></li>
+                <li><a href="#">Message Status</a></li>
                 <li><a href="#">Failures</a></li>
                 <li><a href="#">Exceptions</a></li>
                 <li><a href="#">Current ratio</a></li>
@@ -198,7 +202,8 @@
                             <th class="stats_label numeric" href="#" data-sortkey="avg_response_time" title="Average response time">Average (ms)</th>
                             <th class="stats_label numeric" href="#" data-sortkey="min_response_time" title="Min response time">Min (ms)</th>
                             <th class="stats_label numeric" href="#" data-sortkey="max_response_time" title="Max response time">Max (ms)</th>
-                            <th class="stats_label numeric" href="#" data-sortkey="avg_content_length" title="Average response size">Average size (bytes)</th>
+                            <th class="stats_label numeric" href="#" data-sortkey="avg_request_length" title="Average request size">Avg REQ size (bytes)</th>
+                            <th class="stats_label numeric" href="#" data-sortkey="avg_response_length" title="Average response size">Avg RSP size (bytes)</th>
                             <th class="stats_label numeric" href="#" data-sortkey="current_rps" title="Current number of requests per second">Current RPS</th>
                             <th class="stats_label numeric" href="#" data-sortkey="current_fail_per_sec" title="Current number of failures per second">Current Failures/s</th>
                         </tr>
@@ -209,6 +214,86 @@
             </div>
             <div id="charts" style="display:none;">
                 <div class="charts-container"></div>
+            </div>
+            <div style="display:none;">
+                <table id="upstream-messages" class="stats">
+                    <thead>
+                        <tr>
+                            <th class="stats_label" href="#" data-sortkey="msg_id">Id</th>
+                            <th class="stats_label" href="#" data-sortkey="msg_name">Name</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="num_msgs"># Count</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="size_msgs"># Total (bytes)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="min_msg_size">Min (bytes)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="max_msg_size">Max (bytes)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="avg_msg_size">Average (bytes)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="current_rps">Current RPS</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="current_fail_per_sec">Current Failures/s</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="current_success_rate">Succ Rate (%)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="total_success_rate">Total Succ Rate (%)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+             <div style="display:none;">
+                <table id="downstream-messages" class="stats">
+                    <thead>
+                        <tr>
+                            <th class="stats_label" href="#" data-sortkey="msg_id">Id</th>
+                            <th class="stats_label" href="#" data-sortkey="msg_name">Name</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="num_msgs"># Count</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="size_msgs"># Total (bytes)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="min_msg_size">Min (bytes)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="max_msg_size">Max (bytes)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="avg_msg_size">Avg (bytes)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="current_rps">Current RPS</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="current_fail_per_sec">Current Failures/s</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="current_success_rate">Succ Rate (%)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="total_success_rate">Total Succ Rate (%)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+            <div style="display:none;">
+                <table id="paired-messages" class="stats">
+                    <thead>
+                        <tr>
+                            <th class="stats_label" href="#" data-sortkey="msg_id">Id</th>
+                            <th class="stats_label" href="#" data-sortkey="msg_name">Name</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="num_msgs"># Count</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="size_send_msgs"># Total Send (bytes)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="size_recv_msgs"># Total Recv (bytes)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="avg_send_msg_size">Avg Send (bytes)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="avg_recv_msg_size">Avg Recv (bytes)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="min_cost_time">Min (ms)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="max_cost_time">Max (ms)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="avg_cost_time">Avg (ms)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="current_rps">Current RPS</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="current_fail_per_sec">Current Failures/s</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="current_success_rate">Succ Rate (%)</th>
+                            <th class="stats_label numeric nowrap" href="#" data-sortkey="total_success_rate">Total Succ Rate (%)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+            <div style="display:none;">
+                <table id="message-status" class="stats">
+                    <thead>
+                        <tr>
+                            <th class="stats_label" href="#" data-sortkey="status">Status</th>
+                            <th class="stats_label" href="#" data-sortkey="status_name">Name</th>
+                            <th class="stats_label" href="#" data-sortkey="status_desc">Desc</th>
+                            <th class="error_count stats_label" href="#" data-sortkey="num_status"># Count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
             </div>
             <div style="display:none;">
                 <table id="errors" class="stats">
@@ -324,9 +409,60 @@
             <td class="numeric"><%= Math.round(this.avg_response_time) %></td>
             <td class="numeric"><%= this.min_response_time %></td>
             <td class="numeric"><%= this.max_response_time %></td>
-            <td class="numeric"><%= Math.round(this.avg_content_length) %></td>
+            <td class="numeric"><%= Math.round(this.avg_request_length) %></td>
+            <td class="numeric"><%= Math.round(this.avg_response_length) %></td>
             <td class="numeric"><%= Math.round(this.current_rps*100)/100 %></td>
             <td class="numeric"><%= Math.round(this.current_fail_per_sec*100)/100 %></td>
+        </tr>
+        <% alternate = !alternate; %>
+        ]]>
+    </script>
+    <script type="text/x-jqote-template" id="net-stream-template">
+        <![CDATA[
+        <tr class="<%=(this.is_aggregated ? "total" : "")%>">
+            <td class="name"><%= (this.msg_id != "0x0000" ? this.msg_id : "") %></td>
+            <td class="name"><%= this.msg_name %></td>
+            <td class="numeric"><%= this.num_msgs %></td>
+            <td class="numeric"><%= this.size_msgs %></td>
+            <td class="numeric"><%= this.min_msg_size %></td>
+            <td class="numeric"><%= this.max_msg_size %></td>
+            <td class="numeric"><%= Math.round(this.avg_msg_size) %></td>
+            <td class="numeric"><%= this.current_rps %></td>
+            <td class="numeric"><%= this.current_fail_per_sec %></td>
+            <td class="numeric"><%= this.current_success_rate %></td>
+            <td class="numeric"><%= this.total_success_rate %></td>
+        </tr>
+        <% alternate = !alternate; %>
+        ]]>
+    </script>
+    <script type="text/x-jqote-template" id="paired-message-template">
+        <![CDATA[
+        <tr class="<%=(this.is_aggregated ? "total" : "")%>">
+            <td class="name"><%= (this.msg_id != "0x00000000" ? this.msg_id : "") %></td>
+            <td class="name"><%= (this.msg_name != "" ? this.msg_name : "Aggregated" ) %></td>
+            <td class="numeric"><%= this.num_msgs %></td>
+            <td class="numeric"><%= this.size_send_msgs %></td>
+            <td class="numeric"><%= this.size_recv_msgs %></td>
+            <td class="numeric"><%= Math.round(this.avg_send_msg_size) %></td>
+            <td class="numeric"><%= Math.round(this.avg_recv_msg_size) %></td>
+            <td class="numeric"><%= Math.round(this.min_cost_time * 1000) %></td>
+            <td class="numeric"><%= Math.round(this.max_cost_time * 1000) %></td>
+            <td class="numeric"><%= Math.round(this.avg_cost_time * 1000) %></td>
+            <td class="numeric"><%= this.current_rps%></td>
+            <td class="numeric"><%= this.current_fail_per_sec%></td>
+            <td class="numeric"><%= this.current_success_rate%></td>
+            <td class="numeric"><%= this.total_success_rate%></td>
+        </tr>
+        <% alternate = !alternate; %>
+        ]]>
+    </script>
+    <script type="text/x-jqote-template" id="message-status-template">
+        <![CDATA[
+        <tr class="<%= (this.is_aggregated ? "total" : "") %>">
+            <td class="name"><%= (this.status != "0x0000" ? this.status : "") %></td>
+            <td class="name"><%= (this.is_aggregated ? "Aggregated" : this.status_name) %></td>
+            <td class="name"><%= this.status_desc %></td>
+            <td class="numeric"><%= this.num_status %></td>
         </tr>
         <% alternate = !alternate; %>
         ]]>

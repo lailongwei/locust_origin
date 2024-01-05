@@ -67,10 +67,47 @@ class Events:
     :param request_type: Request type method used
     :param name: Path to the URL that was called (or override name if it was used in the call to the client)
     :param response_time: Time in milliseconds until exception was thrown
-    :param response_length: Content-length of the response
+    :param request_length: request length of the response
+    :param response_length: response length of the response
     :param response: Response object (e.g. a :py:class:`requests.Response`)
     :param context: :ref:`User/request context <request_context>`
     :param exception: Exception instance that was thrown. None if request was successful.
+    """
+
+    send_msg: EventHook
+    """
+    Fired when a message sent.
+    
+    Event arguments:
+    
+    :param msg_id: Packet message Id.
+    :param msg_size: Message size, in bytes.
+    :param status: Message status.
+    """
+
+    recv_msg: EventHook
+    """
+    Fired when a message recv.
+    
+    Event arguments:
+    
+    :param msg_id: Packet message Id.
+    :param msg_size: Message size, in bytes.
+    :param status: Message status.
+    """
+
+    send_and_recv_msg: EventHook
+    """
+    Fired when a paired message send and recv.
+    
+    Event arguments:
+    
+    :param send_msg_id: Send message Id.
+    :param send_msg_size: Send message size, in bytes.
+    :param recv_msg_id: Recv message Id.
+    :param recv_msg_size: Recv message size, in bytes.
+    :param recv_msg_status: Recv message status.
+    :param cost_time: Cost time, in seconds.
     """
 
     user_error: EventHook

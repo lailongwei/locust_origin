@@ -192,7 +192,7 @@ def filter_tasks_by_tags(
         passing = True
         if hasattr(task, "tasks"):
             filter_tasks_by_tags(task, tags, exclude_tags, checked)
-            passing = len(task.tasks) > 0
+            # passing = len(task.tasks) > 0
         else:
             if tags is not None:
                 passing &= "locust_tag_set" in dir(task) and len(task.locust_tag_set & tags) > 0
@@ -204,8 +204,8 @@ def filter_tasks_by_tags(
         checked[task] = passing
 
     task_holder.tasks = new_tasks
-    if not new_tasks:
-        logging.warning(f"{task_holder.__name__} had no tasks left after filtering, instantiating it will fail!")
+    # if not new_tasks:
+    #     logging.warning(f"{task_holder.__name__} had no tasks left after filtering, instantiating it will fail!")
 
 
 class TaskSetMeta(type):
@@ -370,7 +370,9 @@ class TaskSet(metaclass=TaskSetMeta):
                     logger.error("%s\n%s", e, traceback.format_exc())
                     self.wait()
                 else:
-                    raise
+                    logger.error("%s\n%s", e, traceback.format_exc())
+                    self.on_stop()
+                    raise StopUser().with_traceback(e.__traceback__)
 
     def execute_next_task(self):
         self.execute_task(self._task_queue.pop(0))

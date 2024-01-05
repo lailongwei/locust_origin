@@ -1,4 +1,4 @@
-from typing import TypedDict, Optional
+from typing import TypedDict, Optional, List
 
 
 class TeddyCfg:
@@ -6,6 +6,30 @@ class TeddyCfg:
 
     """调试选项"""
     debug = False
+
+
+class TeddyMsgType:
+    """Teddy消息类型"""
+    Send = 1  # 发送类型Msg
+    Recv = 2  # 接收类型Msg
+
+
+class TeddyMsgRecord(TypedDict):
+    """Teddy消息记录"""
+    msg_type: int  # 网络消息类型, 见<TeddyNetMsgType>
+    msg_id: int  # 消息id/opcode/cmd_id
+    msg_len: int  # 消息长度
+    status: int  # 消息状态码
+
+
+class TeddyPairedMsgRecord(TypedDict):
+    """Teddy Paired消息记录"""
+    send_msg_id: int  # 发送消息Id
+    send_msg_size: int  # 发送消息大小
+    recv_msg_id: int  # 接收消息Id
+    recv_msg_size: int  # 接收消息大小
+    recv_msg_status: int  # 接收消息status
+    cost_time: float  # 耗时, 秒为单位
 
 
 class TeddyType:
@@ -20,23 +44,14 @@ class TeddyInfo(TypedDict):
     name: str  # 名, 一般为class name or method name
     desc: Optional[str]  # 描述, 通过特定annotation的desc参数指定
     order: Optional[int]  # 顺序, 只在Task的Teddy类型有效
-
-
-class TeddyNetMsgType:
-    """Teddy网络消息类型"""
-    Send = 1  # 发送类型Msg
-    Recv = 2  # 接收类型Msg
-    SendAndRecv = 3  # 发送且等待接收类型Msg
-
-
-class TeddyNetMsgRecord(TypedDict):
-    """Teddy网络消息记录"""
-    net_msg_type: int  # 网络消息类型, 见<TeddyNetMsgType>
-    send_msg_bytes: Optional[int]  # 发送消息bytes, 对Send/SendAndRecv类型的msg type有效
-    recv_msg_bytes: Optional[int]  # 接收消息bytes, 对Recv/SendAndRecv类型的msg type有效
-    send_perf_counter: Optional[float]  # 发送时的perf counter, 对Send/SendAndRecv类型的msg type有效
-    recv_perf_counter: Optional[float]  # 接收时的perf counter, 对Recv/SendAndRecv类型的msg type有效
-    recv_status_code: int
+    beg_exec_time: Optional[float]  # 开始执行时间, 只在Task的Teddy类型有效
+    total_send_bytes: Optional[int]  # 总发送的字节数, 只在Task的Teddy类型有效
+    total_recv_bytes: Optional[int]  # 总接收的字节数, 只在Task的Teddy类型有效
+    send_msgs: Optional[List[TeddyMsgRecord]]  # 已发送的消息, 只在Task的Teddy类型有效
+    recv_msgs: Optional[List[TeddyMsgRecord]]  # 已接收的消息, 只在Task的Teddy类型有效
+    paired_msgs: Optional[List[TeddyPairedMsgRecord]]  # 已进行的Paired Messages
+    fail: Exception | str | None  # 失败信息, 只在Task的Teddy类型有效
+    stop_user_after_fail: Optional[bool]  # 失败有失败信息, 是否在上报后停止此User
 
 
 class TeddyMsgReport(TypedDict):

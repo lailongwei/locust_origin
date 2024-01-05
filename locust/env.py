@@ -12,7 +12,7 @@ from configargparse import Namespace
 
 from .event import Events
 from .exception import RunnerAlreadyExistsError
-from .stats import RequestStats, StatsCSV
+from .stats import RequestStats, StatsCSV, MsgStats
 from .runners import Runner, LocalRunner, MasterRunner, WorkerRunner
 from .web import WebUI
 from .user import User
@@ -73,6 +73,8 @@ class Environment:
         """If set, only tasks that aren't tagged by tags in this list will be executed. Leave this as None to use the one from parsed_options"""
         self.stats = RequestStats()
         """Reference to RequestStats instance"""
+        self.msg_stats = MsgStats()
+        """Reference to PacketStats instance"""
         self.host = host
         """Base URL of the target system"""
         self.reset_stats = reset_stats

@@ -50,7 +50,7 @@ from .rpc import (
 from .stats import (
     RequestStats,
     StatsError,
-    setup_distributed_stats_event_listeners,
+    setup_distributed_stats_event_listeners, MsgStats,
 )
 from . import argument_parser
 
@@ -125,12 +125,31 @@ class Runner:
         self._users_dispatcher: Optional[UsersDispatcher] = None
 
         # set up event listeners for recording requests
-        def on_request(request_type, name, response_time, response_length, exception=None, **_kwargs):
-            self.stats.log_request(request_type, name, response_time, response_length)
+        def on_request(request_type, name, response_time, request_length, response_length, exception=None, **_kwargs):
+            self.stats.log_request(request_type, name, response_time, request_length, response_length)
             if exception:
                 self.stats.log_error(request_type, name, exception)
 
         self.environment.events.request.add_listener(on_request)
+
+        # set up event listeners for record packet send/recv/send_and_recv
+        def on_send_msg(msg_id, msg_size, status):
+            self.msg_stats.log_msg(True, msg_id, msg_size, status)
+
+        def on_recv_msg(msg_id, msg_size, status):
+            self.msg_stats.log_msg(False, msg_id, msg_size, status)
+
+        def on_send_and_recv_msg(send_msg_id, send_msg_size, recv_msg_id, recv_msg_size, recv_msg_status, cost_time):
+            self.msg_stats.log_paired_msg(send_msg_id,
+                                          send_msg_size,
+                                          recv_msg_id,
+                                          recv_msg_size,
+                                          recv_msg_status,
+                                          cost_time)
+
+        self.environment.events.send_msg.add_listener(on_send_msg)
+        self.environment.events.recv_msg.add_listener(on_recv_msg)
+        self.environment.events.send_and_recv_msg.add_listener(on_send_and_recv_msg)
 
         self.connection_broken = False
         self.final_user_classes_count: Dict[str, int] = {}  # just for the ratio report, fills before runner stops
@@ -141,6 +160,10 @@ class Runner:
             if environment.reset_stats:
                 logger.info("Resetting stats\n")
                 self.stats.reset_all()
+
+            if environment.msg_stats:
+                logger.info('Reseting msg stats\n')
+                self.msg_stats.reset_all()
 
         self.environment.events.spawning_complete.add_listener(on_spawning_complete)
 
@@ -160,6 +183,10 @@ class Runner:
     @property
     def stats(self) -> RequestStats:
         return self.environment.stats
+
+    @property
+    def msg_stats(self) -> MsgStats:
+        return self.environment.msg_stats
 
     @property
     def errors(self) -> Dict[str, StatsError]:

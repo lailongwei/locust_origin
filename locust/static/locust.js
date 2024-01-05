@@ -72,6 +72,9 @@ function resizeCharts() {
 }
 
 var stats_tpl = $('#stats-template');
+var net_stream_tpl = $('#net-stream-template');
+var paired_message_tpl = $('#paired-message-template');
+var msg_status_tpl = $('#message-status-template');
 var errors_tpl = $('#errors-template');
 var exceptions_tpl = $('#exceptions-template');
 var workers_tpl = $('#worker-template');
@@ -135,9 +138,17 @@ var sortBy = function(field, reverse, primer){
 
 // Sorting by column
 var alternate = false; //used by jqote2.min.js
-var sortAttribute = "name";
+var statsSortAttribute = "name";
+var upstreamSortAttribute = "name";
+var downstreamSortAttribute = "name";
+var pairedMsgSortAttribute = "msg_id";
+var statusSortAttribute = "num_status";
 var workerSortAttribute = "id";
-var desc = false;
+var statsDesc = false;
+var upstreamDesc = false;
+var downstreamDesc = false;
+var pairedMsgDesc = false;
+var statusDesc = true;
 var workerDesc = false;
 var report;
 var failuresSortAttribute = "name";
@@ -146,13 +157,49 @@ var failuresDesc = false;
 function renderTable(report) {
     var totalRow = report.stats.pop();
     totalRow.is_aggregated = true;
-    var sortedStats = (report.stats).sort(sortBy(sortAttribute, desc));
+    var sortedStats = (report.stats).sort(sortBy(statsSortAttribute, statsDesc));
     sortedStats.push(totalRow);
     $('#stats tbody').empty();
     $('#errors tbody').empty();
 
     window.alternate = false;
     $('#stats tbody').jqoteapp(stats_tpl, sortedStats);
+
+    var totalUpstreamRow = report.upstream_msg_stats.pop();
+    totalUpstreamRow.is_aggregated = true;
+    var sortedUpstreamMsgStats = (report.upstream_msg_stats).sort(sortBy(upstreamSortAttribute, upstreamDesc));
+    sortedUpstreamMsgStats.push(totalUpstreamRow);
+    $('#upstream-messages tbody').empty();
+
+    window.alternate = false;
+    $('#upstream-messages tbody').jqoteapp(net_stream_tpl, sortedUpstreamMsgStats);
+
+    var totalDownstreamRow = report.downstream_msg_stats.pop();
+    totalDownstreamRow.is_aggregated = true;
+    var sortedDownstreamMsgStats = (report.downstream_msg_stats).sort(sortBy(downstreamSortAttribute, downstreamDesc));
+    sortedDownstreamMsgStats.push(totalDownstreamRow);
+    $('#downstream-messages tbody').empty();
+
+    window.alternate = false;
+    $('#downstream-messages tbody').jqoteapp(net_stream_tpl, sortedDownstreamMsgStats);
+
+    var totalPairedMsgRow = report.paired_msg_stats.pop()
+    totalPairedMsgRow.is_aggregated = true;
+    var sortedPairedMsgStats = (report.paired_msg_stats).sort(sortBy(pairedMsgSortAttribute, pairedMsgDesc));
+    sortedPairedMsgStats.push(totalPairedMsgRow);
+    $('#paired-messages tbody').empty();
+
+    window.alternate = false;
+    $('#paired-messages tbody').jqoteapp(paired_message_tpl, sortedPairedMsgStats);
+
+    var totalMsgStatusRow = report.msg_statuses.pop();
+    totalMsgStatusRow.is_aggregated = true;
+    var sortedMsgStatusesStats = (report.msg_statuses).sort(sortBy(statusSortAttribute, statusDesc));
+    sortedMsgStatusesStats.push(totalMsgStatusRow);
+    $('#message-status tbody').empty();
+
+    window.alternate = false;
+    $('#message-status tbody').jqoteapp(msg_status_tpl, sortedMsgStatusesStats);
 
     window.alternate = false;
     $('#errors tbody').jqoteapp(errors_tpl, (report.errors).sort(sortBy(failuresSortAttribute, failuresDesc)));
@@ -173,13 +220,40 @@ function renderWorkerTable(report) {
     }
 }
 
-
 $("#stats .stats_label").click(function(event) {
     event.preventDefault();
-    sortAttribute = $(this).attr("data-sortkey");
-    desc = !desc;
+    statsSortAttribute = $(this).attr("data-sortkey");
+    statsDesc = !statsDesc;
     renderTable(window.report);
 });
+
+$("#upstream-messages .stats_label").click(function(event) {
+    event.preventDefault();
+    upstreamSortAttribute = $(this).attr("data-sortkey");
+    upstreamDesc = !upstreamDesc;
+    renderTable(window.report);
+});
+
+$("#downstream-messages .stats_label").click(function(event) {
+    event.preventDefault();
+    downstreamSortAttribute = $(this).attr("data-sortkey");
+    downstreamDesc = !downstreamDesc;
+    renderTable(window.report);
+});
+
+$("#paired-messages .stats_label").click(function(event) {
+    event.preventDefault();
+    pairedMsgSortAttribute = $(this).attr("data-sortkey");
+    pairedMsgDesc = !pairedMsgDesc;
+    renderTable(window.report);
+});
+
+$("#message-status .stats_label").click(function(event) {
+    event.preventDefault();
+    statusSortAttribute = $(this).attr("data-sortkey");
+    statusDesc = !statusDesc;
+    renderTable(window.report);
+})
 
 $("#errors .stats_label").click(function(event) {
     event.preventDefault();

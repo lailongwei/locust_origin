@@ -1,6 +1,7 @@
 import functools
+import logging
 import time
-from typing import Type, Union, Dict
+from typing import Type, Union, Dict, Optional
 
 from . import teddy_logger, TeddySession
 from ..user.users import UserMeta, User
@@ -40,8 +41,23 @@ class TeddyUserMeta(UserMeta):
             raise TeddyException('Please use the <tasks> property to specific one or more taskset(s)')
         class_dict['tasks'] = teddy_tasksets
 
+        # 注入taskset.cfg配置项
+        user_cfg = class_dict.get('cfg')
+        if (user_cfg is not None and
+                'tasksets' in user_cfg):
+            taskset_cfgs = user_cfg['tasksets']
+            for taskset in tasksets:
+                if taskset.__name__ in taskset_cfgs:
+                    setattr(taskset, 'cfg', taskset_cfgs[taskset.__name__])
+                else:
+                    setattr(taskset, 'cfg', None)
+        else:
+            for taskset in tasksets:
+                setattr(taskset, 'cfg', None)
+
         # 注入user id生成支持
         class_dict['_user_id_begin'] = int(time.time()) << 32
+
         def _gen_user_id(the_self):
             user_id = the_self.__class__._user_id_begin + 1
             the_self.__class__._user_id_begin = user_id
@@ -49,8 +65,17 @@ class TeddyUserMeta(UserMeta):
         class_dict['_gen_user_id'] = _gen_user_id
 
         # 改写on_start/on_stop, 以实现taskset的on_init/on_destroy调用
-        user_on_start = class_dict['on_start']
-        user_on_stop = class_dict['on_stop']
+        user_on_start = class_dict.get('on_start')
+        if user_on_start is None:
+            def _dft_user_on_start(user_self):
+                pass
+            user_on_start = _dft_user_on_start
+
+        user_on_stop = class_dict.get('on_stop')
+        if user_on_stop is None:
+            def _dft_user_on_stop(user_self):
+                pass
+            user_on_stop = _dft_user_on_stop
 
         @functools.wraps(user_on_start)
         def wrapped_user_on_start(user_self):
@@ -66,6 +91,10 @@ class TeddyUserMeta(UserMeta):
             for ts in reversed(user_self.tasksets):
                 ts.on_destroy()
 
+            if user_self.session:
+                user_self.session.destroy()
+                user_self.session = None
+
         class_dict['on_start'] = wrapped_user_on_start
         class_dict['on_stop'] = wrapped_user_on_stop
 
@@ -78,6 +107,7 @@ class TeddyUser(User, metaclass=TeddyUserMeta):
     """抽象User类"""
     abstract = True
 
+    # region __init__
     def __init__(self, environment):
         super().__init__(environment)
         self._user_id: int = self._gen_user_id()
@@ -85,7 +115,9 @@ class TeddyUser(User, metaclass=TeddyUserMeta):
         self._user_logic_id = 0
         self._session: TeddySession | None = None
         self._taskset_instance: TeddyTopTaskSet = TeddyTopTaskSet(self)
+    # endregion
 
+    # region properties
     @property
     def user_id(self):
         """取得user Id"""
@@ -126,11 +158,23 @@ class TeddyUser(User, metaclass=TeddyUserMeta):
         """取得会话对象"""
         return self._session
 
+    @session.setter
+    def session(self, session: TeddySession):
+        """设置会话对象"""
+        self._session = session
+
     @property
     def tasksets(self) -> [TeddyTaskSet]:
         """返回所有Tasksets"""
         return self._taskset_instance.tasksets
 
+    @property
+    def user_state(self) -> int:
+        """用户状态, -1表示无状态, 要求业务层重写"""
+        return -1
+    # endregion
+
+    # region task/taskset操作
     def get_cur_taskset(self) -> Union[TeddyTaskSet, None]:
         """
         获取当前任务集
@@ -145,6 +189,86 @@ class TeddyUser(User, metaclass=TeddyUserMeta):
         :return: 任务集对象, 如找不到则返回空
         """
         return self._taskset_instance.get_taskset(taskset_cls_or_name)
+    # endregion
 
+    # region user/taskset事件方法调用支持
+    def invoke_event_method(self,
+                            method_name: str,
+                            /, *,
+                            reverse: bool = False,
+                            skip_user: bool = False,
+                            require_user_state: int = -1,
+                            **method_params) -> bool:
+        """
+        调用事件方法, 要求以on_开头, 正向: tasksets->user, 反向: user->reversed tasksets
+        :param method_name: 方法名
+        :param reverse: (optional) 是否反向调用, 默认False
+        :param skip_user: (optional) 是否跳过User方法调用, 即只调用component方法, 默认False
+        :param require_user_state: (optional) 要求的user state, 默认-1, 即: 无要求
+        :param method_params: 方法参数
+        :returns: 是否调用成功
+        """
+        # 用户状态校验
+        if (require_user_state >= 0 and
+                self.user_state < require_user_state):
+            return False
+
+        # 方法名校验
+        if not method_name.startswith('on_'):
+            raise TeddyException('User event method must be starts with <on_>')
+
+        # 调用
+        user_method = getattr(self, method_name) if (not skip_user and hasattr(self, method_name)) else None
+        if reverse and user_method is not None:
+            user_method(**method_params)
+
+        for taskset in reversed(self.tasksets) if reverse else self.tasksets:
+            method = getattr(taskset, method_name) if hasattr(taskset, method_name) else None
+            if method:
+                method(**method_params)
+
+        if not reverse and user_method is not None:
+            user_method(**method_params)
+    # endregion
+
+    # region 日志输出支持
+    def log(self, log_level: int, msg: object):
+        """输出日志"""
+        teddy_logger.log(log_level, f'{self}: {msg}')
+
+    def logd(self, msg: object):
+        """输出debug log"""
+        self.log(logging.DEBUG, msg)
+
+    def logi(self, msg: object):
+        """输出info log"""
+        self.log(logging.INFO, msg)
+
+    def logw(self, msg: object):
+        """输出warn log"""
+        self.log(logging.WARNING, msg)
+
+    def loge(self, msg: object):
+        """输出error log"""
+        self.log(logging.ERROR, msg)
+
+    def logf(self, msg: object):
+        """输出fatal log"""
+        self.log(logging.FATAL, msg)
+    # endregion
+
+    # region __str__
     def __str__(self):
-        return f'{self.__class__.__name__}[{self._state}, {self._user_id}|{self._user_name}|{self._user_logic_id}]'
+        if self.session is not None:
+            session_info = f'({self.session.session_id}, {self.session.session_state})'
+        else:
+            session_info = '(No session)'
+
+        # usr[state, id|logic_id|session]
+        str_repr = (f'{self.__class__.__name__}'
+                    f'[{self._state}, '
+                    f'id: {self._user_id}|'
+                    f'logic_id: {self._user_logic_id}'
+                    f'|session: {session_info}]')
+        return str_repr
+    # endregion

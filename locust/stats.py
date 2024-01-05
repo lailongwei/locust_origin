@@ -3,7 +3,6 @@ from abc import abstractmethod
 import datetime
 import hashlib
 import json
-from tempfile import NamedTemporaryFile
 import time
 from collections import namedtuple, OrderedDict
 from copy import copy
@@ -74,7 +73,8 @@ class StatsEntryDict(StatsBaseDict):
     total_response_time: int
     max_response_time: int
     min_response_time: Optional[int]
-    total_content_length: int
+    total_request_length: int
+    total_response_length: int
     response_times: Dict[int, int]
     num_reqs_per_sec: Dict[int, int]
     num_fail_per_sec: Dict[int, int]
@@ -189,6 +189,7 @@ def diff_response_time_dicts(latest: Dict[int, int], old: Dict[int, int]) -> Dic
 
 class EntriesDict(dict):
     def __init__(self, request_stats):
+        super().__init__()
         self.request_stats = request_stats
 
     def __missing__(self, key):
@@ -236,9 +237,14 @@ class RequestStats:
     def start_time(self):
         return self.total.start_time
 
-    def log_request(self, method: str, name: str, response_time: int, content_length: int) -> None:
-        self.total.log(response_time, content_length)
-        self.entries[(name, method)].log(response_time, content_length)
+    def log_request(self,
+                    method: str,
+                    name: str,
+                    response_time: int,
+                    request_length: int,
+                    response_length: int) -> None:
+        self.total.log(response_time, request_length, response_length)
+        self.entries[(name, method)].log(response_time, request_length, response_length)
 
     def log_error(self, method: str, name: str, error: Exception | str | None) -> None:
         self.total.log_error(error)
@@ -335,7 +341,7 @@ class StatsEntry:
         If use_response_times_cache is set to True, this will be a {timestamp => CachedResponseTimes()}
         OrderedDict that holds a copy of the response_times dict for each of the last 20 seconds.
         """
-        self.total_content_length: int = 0
+        self.total_response_length: int = 0
         """ The sum of the content length of all the responses for this entry """
         self.start_time: float = 0.0
         """ Time of the first request for this entry """
@@ -355,12 +361,13 @@ class StatsEntry:
         self.last_request_timestamp = None
         self.num_reqs_per_sec = {}
         self.num_fail_per_sec = {}
-        self.total_content_length = 0
+        self.total_request_length = 0
+        self.total_response_length = 0
         if self.use_response_times_cache:
             self.response_times_cache = OrderedDict()
             self._cache_response_times(int(time.time()))
 
-    def log(self, response_time: int, content_length: int) -> None:
+    def log(self, response_time: int, request_length: int, response_length: int) -> None:
         # get the time
         current_time = time.time()
         t = int(current_time)
@@ -373,8 +380,9 @@ class StatsEntry:
         self._log_time_of_request(current_time)
         self._log_response_time(response_time)
 
-        # increase total content-length
-        self.total_content_length += content_length
+        # increase total request length/response length
+        self.total_request_length += request_length
+        self.total_response_length += response_length
 
     def _log_time_of_request(self, current_time: float) -> None:
         t = int(current_time)
@@ -490,9 +498,16 @@ class StatsEntry:
             return 0.0
 
     @property
-    def avg_content_length(self):
+    def avg_request_length(self):
         try:
-            return self.total_content_length / self.num_requests
+            return self.total_request_length / self.num_requests
+        except ZeroDivisionError:
+            return 0
+
+    @property
+    def avg_response_length(self):
+        try:
+            return self.total_response_length / self.num_requests
         except ZeroDivisionError:
             return 0
 
@@ -520,7 +535,7 @@ class StatsEntry:
         elif other.min_response_time is not None:
             # this means self.min_response_time is None, so we can safely replace it
             self.min_response_time = other.min_response_time
-        self.total_content_length += other.total_content_length
+        self.total_response_length += other.total_response_length
 
         for key in other.response_times:
             self.response_times[key] = self.response_times.get(key, 0) + other.response_times[key]
@@ -698,7 +713,8 @@ class StatsEntry:
             "median_response_time": self.median_response_time,
             "ninetieth_response_time": self.get_response_time_percentile(0.9),
             "ninety_ninth_response_time": self.get_response_time_percentile(0.99),
-            "avg_content_length": self.avg_content_length,
+            "avg_request_length": self.avg_request_length,
+            "avg_response_length": self.avg_response_length,
         }
 
 
@@ -768,6 +784,371 @@ class StatsError:
             "error": escape(self.parse_error(self.error)),
             "occurrences": self.occurrences,
         }
+
+
+class MsgStats:
+    """Message统计"""
+    def __init__(self):
+        # 上/下行包统计
+        self.upstream_total = MsgStatEntry(self, 0)
+        self.upstream_total.msg_name = 'Aggregated'
+        self.downstream_total = MsgStatEntry(self, 0)
+        self.downstream_total.msg_name = 'Aggregated'
+        self.upstream_entries: Dict[int, MsgStatEntry] = {}
+        self.downstream_entries: Dict[int, MsgStatEntry] = {}
+
+        # Paired消息统计
+        self.paired_msg_total = PairedMsgStatEntry(self, 0, 0)
+        self.paired_msg_entries: Dict[int, PairedMsgStatEntry] = {}
+
+        # 状态码统计
+        self.status_total = MsgStatusStatEntry(self, 0)
+        self.status_entries: Dict[int, MsgStatusStatEntry] = {}
+
+    @property
+    def start_time(self) -> float:
+        return self._get_max_timestamp(self.upstream_total.start_time,
+                                       self.downstream_total.start_time)
+
+    @property
+    def last_msg_timestamp(self) -> float:
+        return self._get_max_timestamp(self.upstream_total.last_msg_timestamp,
+                                       self.downstream_total.last_msg_timestamp)
+
+    def log_msg(self,
+                upstream: bool,
+                msg_id: int,
+                msg_size: int,
+                status: int):
+        now_time = time.time()
+        total = self.upstream_total if upstream else self.downstream_total
+        total.log(now_time, msg_size, status)
+
+        entries = (self.upstream_entries if upstream else self.downstream_entries)
+        entry = entries.get(msg_id)
+        if entry is None:
+            entry = MsgStatEntry(self, msg_id)
+            entries[msg_id] = entry
+        entry.log(now_time, msg_size, status)
+
+        if status != 0:
+            self.status_total.log(now_time)
+            status_entry = self.status_entries.get(status)
+            if status_entry is None:
+                status_entry = MsgStatusStatEntry(self, status)
+                self.status_entries[status] = status_entry
+            status_entry.log(now_time)
+
+    def log_paired_msg(self,
+                       send_msg_id: int,
+                       send_msg_size: int,
+                       recv_msg_id: int,
+                       recv_msg_size: int,
+                       recv_msg_status: int,
+                       cost_time: int):
+        now_time = time.time()
+        self.paired_msg_total.log(now_time, send_msg_size, recv_msg_size, recv_msg_status, cost_time)
+        paired_msg_key = PairedMsgStatEntry.build_paired_msg_key(send_msg_id, recv_msg_id)
+        paired_msg_stat = self.paired_msg_entries.get(paired_msg_key)
+        if paired_msg_stat is None:
+            paired_msg_stat = PairedMsgStatEntry(self, send_msg_id, recv_msg_id)
+            self.paired_msg_entries[paired_msg_key] = paired_msg_stat
+        paired_msg_stat.log(now_time, send_msg_size, recv_msg_size, recv_msg_status, cost_time)
+
+    def reset_all(self):
+        self.upstream_total.reset()
+        for msg_stat in self.upstream_entries.values():
+            msg_stat.reset()
+
+        self.downstream_total.reset()
+        for msg_stat in self.downstream_entries.values():
+            msg_stat.reset()
+
+        self.paired_msg_total.reset()
+        for paired_msg_stat in self.paired_msg_entries.values():
+            paired_msg_stat.reset()
+
+        self.status_total.reset()
+        for status_stat in self.status_entries.values():
+            status_stat.reset()
+
+    @staticmethod
+    def _get_max_timestamp(ts1: float, ts2: float) -> float:
+        if ts1:
+            if ts2:
+                return ts1 if ts1 > ts2 else ts2
+            else:
+                return ts1
+        else:
+            return ts2 if ts2 is not None else 0
+
+
+class MsgMetaHub:
+    """Message元信息Hub, 用于缓存Message元信息"""
+    msg_names: Dict[int, str] = {}
+    """Message名字描述"""
+
+    status_names: Dict[int, str] = {}
+    """Status名字描述"""
+    status_descs: Dict[int, str] = {}
+    """Status描述字典"""
+
+
+class MsgStatEntry:
+    """Message统计Entry"""
+    def __init__(self, msg_stats: MsgStats, msg_id: int):
+        self.stats = msg_stats
+        """所属MsgStats"""
+        self.msg_id = msg_id
+        """Message Id"""
+        self.msg_name = MsgMetaHub.msg_names.get(msg_id) or 'None'
+        """Message Name"""
+
+        self.size_msgs: int = 0
+        """统计成员: 总共收/发了多少Message大小(bytes)"""
+        self.min_msg_size: Optional[int] = None
+        """统计成员: 最小的Message大小"""
+        self.max_msg_size: int = 0
+        """统计成员: 最大的Message大小"""
+
+        self.num_msgs: int = 0
+        """统计成员: 总共有多少Message被收/发"""
+        self.num_msgs_per_sec: Dict[int, int] = {}
+        """统计成员: 每秒收/发的Message数量"""
+
+        self.num_fails: int = 0
+        """统计成员: 收发包中, 失败的Message数量"""
+        self.num_fails_per_sec: Dict[int, int] = {}
+        """统计成员: 每秒失败的收/发Message数量"""
+
+        self.start_time: float = 0
+        """统计成员: 开始时间"""
+        self.last_msg_timestamp: Optional[float] = None
+        """统计成员: 最后一个消息的时间戳"""
+
+    @property
+    def avg_msg_size(self):
+        try:
+            return round(self.size_msgs / self.num_msgs, 1)
+        except ZeroDivisionError:
+            return 0
+
+    @property
+    def current_rps(self):
+        if self.stats.last_msg_timestamp is None:
+            return 0
+
+        slice_start_time: int = max(int(self.stats.start_time), int(self.stats.last_msg_timestamp) - 12)
+        msgs = [
+            self.num_msgs_per_sec.get(t, 0.0) for t in range(slice_start_time, int(self.stats.last_msg_timestamp) - 2)
+        ]
+        return round(avg(msgs), 1)
+
+    @property
+    def current_fail_per_sec(self):
+        if self.stats.last_msg_timestamp is None:
+            return 0
+
+        slice_start_time: int = max(int(self.stats.start_time), int(self.stats.last_msg_timestamp) - 12)
+        msgs = [
+            self.num_fails_per_sec.get(t, 0.0) for t in range(slice_start_time, int(self.stats.last_msg_timestamp) - 2)
+        ]
+        return round(avg(msgs), 1)
+
+    @property
+    def current_success_rate(self) -> float:
+        if self.stats.last_msg_timestamp is None:
+            return 100.0
+
+        total_msgs = 0
+        total_fail_msgs = 0
+        slice_start_time: int = max(int(self.stats.start_time), int(self.stats.last_msg_timestamp) - 12)
+        for t in range(slice_start_time, int(self.stats.last_msg_timestamp) - 2):
+            total_msgs += self.num_msgs_per_sec.get(t, 0)
+            total_fail_msgs += self.num_fails_per_sec.get(t, 0)
+
+        try:
+            return round((total_msgs - total_fail_msgs) * 100.0 / total_msgs, 1)
+        except ZeroDivisionError:
+            return 100.0
+
+    @property
+    def total_success_rate(self) -> float:
+        try:
+            return round((self.num_msgs - self.num_fails) * 100.0 / self.num_msgs, 1)
+        except ZeroDivisionError:
+            return 100.0
+
+    def log(self, now_time: float, msg_size: int, status: int):
+        self.size_msgs += msg_size
+        if self.min_msg_size is None:
+            self.min_msg_size = msg_size
+        else:
+            self.min_msg_size = min(self.min_msg_size, msg_size)
+        self.max_msg_size = max(msg_size, self.max_msg_size)
+
+        now_time_in_secs = int(now_time)
+        self.num_msgs += 1
+        self.num_msgs_per_sec[now_time_in_secs] = (
+                self.num_msgs_per_sec.setdefault(now_time_in_secs, 0) + 1)
+
+        if status != 0:
+            self.num_fails += 1
+            self.num_fails_per_sec[now_time_in_secs] = (
+                    self.num_fails_per_sec.setdefault(now_time_in_secs, 0) + 1)
+
+        self.last_msg_timestamp = now_time
+
+    def to_dict(self):
+        return {
+            'msg_id': f'0x{self.msg_id:04x}',
+            'msg_name': self.msg_name,
+            'num_msgs': self.num_msgs,
+            'size_msgs': self.size_msgs,
+            'min_msg_size': 0 if self.min_msg_size is None else self.min_msg_size,
+            'max_msg_size': self.max_msg_size,
+            'avg_msg_size': self.avg_msg_size,
+            'current_rps': self.current_rps,
+            'current_fail_per_sec': self.current_fail_per_sec,
+            'current_success_rate': self.current_success_rate,
+            'total_success_rate': self.total_success_rate,
+        }
+
+    def reset(self):
+        self.size_msgs = 0
+        self.min_msg_size = None
+        self.max_msg_size = 0
+
+        self.num_msgs = 0
+        self.num_msgs_per_sec.clear()
+
+        self.num_fails = 0
+        self.num_fails_per_sec.clear()
+
+        self.start_time = time.time()
+        self.last_msg_timestamp = None
+
+
+class PairedMsgStatEntry:
+    """成对的Message统计Entry"""
+    def __init__(self, msg_stats: MsgStats, send_msg_id: int, recv_msg_id: int):
+        self.stats = msg_stats
+        """所属MsgStats"""
+        self.paired_msg_key: int = self.build_paired_msg_key(send_msg_id, recv_msg_id)
+        """Paired Message Key"""
+        self.paired_msg_name: str = ''
+        """Paired Message Name"""
+
+        self.send_msg_stat: MsgStatEntry = MsgStatEntry(msg_stats, send_msg_id)
+        """发送Message Stat"""
+        self.recv_msg_stat: MsgStatEntry = MsgStatEntry(msg_stats, recv_msg_id)
+        """接收Message Stat"""
+
+        self.total_cost_time: float = 0
+        """总耗时, 秒为单位"""
+        self.min_cost_time: Optional[int] = None
+        """最小耗时"""
+        self.max_cost_time: int = 0
+        """最大耗时"""
+
+        # 生成paired_msg_name
+        if send_msg_id != 0 or recv_msg_id != 0:
+            self.paired_msg_name = self.send_msg_stat.msg_name + ' & ' + self.recv_msg_stat.msg_name
+
+    @property
+    def avg_cost_time(self) -> float:
+        try:
+            return self.total_cost_time / self.send_msg_stat.num_msgs
+        except ZeroDivisionError:
+            return 0.0
+
+    @staticmethod
+    def build_paired_msg_key(send_msg_id: int, recv_msg_id: int) -> int:
+        return (send_msg_id << 16) | recv_msg_id
+
+    def log(self, now_time: float, send_msg_size: int, recv_msg_size: int, recv_msg_status: int, cost_time: float):
+        self.send_msg_stat.log(now_time, send_msg_size, 0)
+        self.recv_msg_stat.log(now_time, recv_msg_size, recv_msg_status)
+
+        if self.min_cost_time is None:
+            self.min_cost_time = cost_time
+        else:
+            self.min_cost_time = min(self.min_cost_time, cost_time)
+        self.max_cost_time = max(cost_time, self.max_cost_time)
+        self.total_cost_time += cost_time
+
+    def to_dict(self):
+        return {
+            'msg_id': f'0x{self.paired_msg_key:08x}',
+            'msg_name': self.paired_msg_name,
+            'num_msgs': self.send_msg_stat.num_msgs,
+            'size_send_msgs': self.send_msg_stat.size_msgs,
+            'size_recv_msgs': self.recv_msg_stat.size_msgs,
+            'avg_send_msg_size': self.send_msg_stat.avg_msg_size,
+            'avg_recv_msg_size': self.recv_msg_stat.avg_msg_size,
+            "min_cost_time": self.min_cost_time or 0.0,
+            "max_cost_time": self.max_cost_time,
+            "avg_cost_time": self.avg_cost_time,
+            'current_rps': self.send_msg_stat.current_rps,
+            'current_fail_per_sec': self.recv_msg_stat.current_fail_per_sec,
+            'current_success_rate': self.recv_msg_stat.current_success_rate,
+            'total_success_rate': self.recv_msg_stat.total_success_rate,
+        }
+
+    def reset(self):
+        self.send_msg_stat.reset()
+        self.recv_msg_stat.reset()
+        self.total_cost_time = 0.0
+        self.min_cost_time = None
+        self.max_cost_time = 0
+
+
+class MsgStatusStatEntry:
+    """协议包状态码统计Entry"""
+    def __init__(self, msg_stats: MsgStats, status: int):
+        self.msg_stats = msg_stats
+        """所属PacketStats"""
+        self.status = status
+        """Status"""
+        self.status_name = MsgMetaHub.status_names.get(status) or 'None'
+        """Status名"""
+        self.status_desc = MsgMetaHub.status_descs.get(status) or 'None'
+        """Status描述"""
+        if len(self.status_desc) > 20:
+            self.status_desc = self.status_desc[:20] + '...'
+
+        """Status描述"""
+
+        self.num_status: int = 0
+        """统计成员: Status发生次数"""
+        self.num_status_per_sec: Dict[int, int] = {}
+        """统计成员: 每秒Status发生次数"""
+
+        self.start_time: float = 0
+        """统计成员: 开始统计时间"""
+        self.last_status_timestamp: Optional[float] = None
+        """统计成员: 最后次个status统计时间"""
+
+    def log(self, now_time: float):
+        now_time_in_secs = int(now_time)
+        self.num_status += 1
+        self.num_status_per_sec[now_time_in_secs] = (
+                self.num_status_per_sec.setdefault(now_time_in_secs, 0) + 1)
+
+    def to_dict(self):
+        return {
+            'num_status': self.num_status,
+            'status': f'0x{self.status:04x}',
+            "status_name": self.status_name,
+            'status_desc': self.status_desc,
+        }
+
+    def reset(self):
+        self.num_status = 0
+        self.num_status_per_sec.clear()
+
+        self.start_time = time.time()
+        self.last_status_timestamp = None
 
 
 def avg(values: List[float | int]) -> float:
@@ -910,6 +1291,20 @@ def sort_stats(stats: Dict[Any, S]) -> List[S]:
     return [stats[key] for key in sorted(stats.keys())]
 
 
+def sort_msg_stats(msg_stats: Dict[int, MsgStatEntry]) -> List[MsgStatEntry]:
+    return [msg_stats[key] for key in sorted(msg_stats.keys())]
+
+
+def sort_paired_msg_stats(paired_msg_stats: Dict[int, PairedMsgStatEntry]) -> List[PairedMsgStatEntry]:
+    return [paired_msg_stats[key] for key in sorted(paired_msg_stats.keys())]
+
+
+def sort_msg_statuses(msg_statuses: Dict[int, MsgStatusStatEntry]) -> List[MsgStatusStatEntry]:
+    statuses_list = [s for s in msg_statuses.values()]
+    statuses_list.sort(key=lambda s: s.num_status, reverse=True)
+    return statuses_list
+
+
 def stats_history(runner: "Runner") -> None:
     """Save current stats info to history for charts of report."""
     while True:
@@ -996,7 +1391,8 @@ class StatsCSV:
                         stats_entry.avg_response_time,
                         stats_entry.min_response_time or 0,
                         stats_entry.max_response_time,
-                        stats_entry.avg_content_length,
+                        stats_entry.avg_request_length,
+                        stats_entry.avg_response_length,
                         stats_entry.total_rps,
                         stats_entry.total_fail_per_sec,
                     ],
@@ -1156,7 +1552,8 @@ class StatsCSVFileWriter(StatsCSV):
                         stats_entry.avg_response_time,
                         stats_entry.min_response_time or 0,
                         stats_entry.max_response_time,
-                        stats_entry.avg_content_length,
+                        stats_entry.avg_request_length,
+                        stats_entry.avg_response_length,
                     ),
                 )
             )

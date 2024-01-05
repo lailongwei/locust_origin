@@ -131,7 +131,7 @@ class TestRequestStats(unittest.TestCase):
         self.assertEqual(self.s.avg_response_time, 187.71428571428572)
 
     def test_total_content_length(self):
-        self.assertEqual(self.s.total_content_length, 9)
+        self.assertEqual(self.s.total_response_length, 9)
 
     def test_reset(self):
         self.s.reset()
@@ -435,13 +435,13 @@ class TestCsvStats(LocustTestCase):
         )
 
         for i in range(10):
-            self.runner.stats.log_request("GET", "/", 100, content_length=666)
+            self.runner.stats.log_request("GET", "/", 100, response_length=666)
 
         greenlet = gevent.spawn(stats_writer)
         gevent.sleep(10)
 
         for i in range(10):
-            self.runner.stats.log_request("GET", "/", 10, content_length=666)
+            self.runner.stats.log_request("GET", "/", 10, response_length=666)
 
         gevent.sleep(5)
 
