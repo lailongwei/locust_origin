@@ -18,11 +18,18 @@ class TeddyUserMgr:
     def user_logic_id_2_users(self):
         return self._user_logic_id_2_users
 
+    @property
+    def user_name_2_users(self):
+        return self._user_name_2_users
+
     def get_by_user_id(self, user_id: int):
         return self._user_id_2_users.get(user_id)
 
     def get_by_user_logic_id(self, user_logic_id: int):
         return self._user_logic_id_2_users.get(user_logic_id)
+
+    def get_by_user_name(self, user_name: str):
+        return self._user_name_2_users.get(user_name)
 
     def _on_user_start(self, user):
         self._user_id_2_users[user.user_id] = user
