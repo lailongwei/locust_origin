@@ -159,10 +159,22 @@ def main():
 
     # setup logging
     if not options.skip_log_setup:
-        if options.loglevel.upper() in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
-            setup_logging(options.loglevel, options.logfile)
+        loglevel = options.loglevel.upper()
+        file_loglevel = options.file_loglevel.upper()
+        if not file_loglevel:
+            file_loglevel = loglevel
+        console_loglevel = options.console_loglevel.upper()
+        if not console_loglevel:
+            console_loglevel = loglevel
+
+        loglevels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        if (loglevel in loglevels and
+                file_loglevel in loglevels and
+                console_loglevel in loglevels):
+            setup_logging(loglevel, options.logfile, console_loglevel, file_loglevel)
         else:
-            sys.stderr.write("Invalid --loglevel. Valid values are: DEBUG/INFO/WARNING/ERROR/CRITICAL\n")
+            sys.stderr.write("Invalid --loglevel/--console-loglevel/-file-loglevel. "
+                             "Valid values are: DEBUG/INFO/WARNING/ERROR/CRITICAL\n")
             sys.exit(1)
 
     children = []

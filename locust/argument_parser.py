@@ -561,6 +561,22 @@ Typically ONLY these options (and --locustfile) need to be specified on workers,
         env_var="LOCUST_LOGLEVEL",
     )
     log_group.add_argument(
+        "--console-loglevel",
+        default="",
+        dest="console_loglevel",
+        help="Choose between DEBUG/INFO/WARNING/ERROR. Default using <--loglevel> config",
+        metavar="<console loglevel>",
+        env_var="LOCUST_CONSOLE_LOGLEVEL",
+    )
+    log_group.add_argument(
+        "--file-loglevel",
+        default="",
+        dest="file_loglevel",
+        help="Choose between DEBUG/INFO/WARNING/ERROR. Default using <--loglevel> config",
+        metavar="<file loglevel>",
+        env_var="LOCUST_FILE_LOGLEVEL",
+    )
+    log_group.add_argument(
         "--logfile",
         help="Path to log file. If not set, log will go to stderr",
         metavar="<filename>",

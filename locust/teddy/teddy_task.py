@@ -510,7 +510,7 @@ def teddy_taskset(taskset_desc: str | Type[TeddyTaskSet] = None):
             task_teddy_info['stop_user_after_fail'] = False
 
             # Log
-            teddy_logger.info(f'{taskset}: Exec task {task.__name__}')
+            teddy_logger.debug(f'{taskset}: Exec task {task.__name__}')
 
             # 执行
             task(taskset)

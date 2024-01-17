@@ -19,8 +19,17 @@ class LogReader(logging.Handler):
         self.logs.append(self.format(record))
 
 
-def setup_logging(loglevel, logfile=None):
+def setup_logging(loglevel, logfile=None, console_loglevel: str | None = None, file_loglevel: str | None = None):
     loglevel = loglevel.upper()
+
+    if console_loglevel is None:
+        console_loglevel = loglevel
+    if file_loglevel is None:
+        file_loglevel = loglevel
+
+    min_loglevel_value = min(logging.getLevelName(console_loglevel), logging.getLevelName(file_loglevel))
+    if logging.getLevelName(loglevel) < min_loglevel_value:
+        loglevel = logging.getLevelName(min_loglevel_value)
 
     LOGGING_CONFIG = {
         "version": 1,
@@ -37,12 +46,18 @@ def setup_logging(loglevel, logfile=None):
             "console": {
                 "class": "logging.StreamHandler",
                 "formatter": "default",
+                "level": console_loglevel,
             },
             "console_plain": {
                 "class": "logging.StreamHandler",
                 "formatter": "plain",
+                "level": console_loglevel,
             },
-            "log_reader": {"class": "locust.log.LogReader", "formatter": "default"},
+            "log_reader": {
+                "class": "locust.log.LogReader",
+                "formatter": "default",
+                "level": console_loglevel,
+            },
         },
         "loggers": {
             "locust": {
@@ -81,7 +96,8 @@ def setup_logging(loglevel, logfile=None):
             "mode": "a",
             "maxBytes": 1024 * 1024 * 512,
             "encoding": "utf-8",
-            "backupCount": 10
+            "backupCount": 10,
+            "level": file_loglevel,
         }
 
         LOGGING_CONFIG["handlers"]["network_file"] = {
@@ -92,6 +108,7 @@ def setup_logging(loglevel, logfile=None):
             "maxBytes": 1024 * 1024 * 512,
             "encoding": "utf-8",
             "backupCount": 10,
+            "level": file_loglevel,
             "delay": True
         }
 
