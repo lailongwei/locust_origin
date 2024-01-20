@@ -14,7 +14,8 @@ from .teddy_task import (
     TeddyTaskSet,
     TeddyTaskSetMeta,
     teddy_task,
-    teddy_taskset)
+    teddy_taskset,
+    TeddyTaskScheduleMode)
 from .teddy_session import (
     TeddySessionState,
     TeddySession)

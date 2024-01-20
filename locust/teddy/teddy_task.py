@@ -1,7 +1,9 @@
 import functools
 import inspect
 import logging
+import random
 import time
+from enum import Enum
 from typing import Type, Callable, cast
 
 import locust
@@ -24,6 +26,18 @@ from .teddy_exception import (
 TeddyTaskT = Callable[..., None]
 
 
+class TeddyTaskScheduleMode(Enum):
+    """Teddy任务调度模式"""
+    Sequential = 1
+    """顺序调度"""
+
+    Randomized = 2
+    """随机调度"""
+
+    Fixed = 3
+    """定序调度(需要提供确定序列, id/task (method) name)"""
+
+
 class TeddyTaskSetMeta(TaskSetMeta):
     """
     Teddy任务集元类, 用于提取指定Teddy任务集中的所有任务
@@ -38,15 +52,54 @@ class TeddyTaskSetMeta(TaskSetMeta):
                 teddy_tasks.append(item)
         teddy_tasks = sorted(teddy_tasks, key=lambda x: x.teddy_info['order'])
 
+        # 校验order
         task_orders = set()
         for task in teddy_tasks:
             task_orders.add(task.teddy_info['order'])
-
         if len(teddy_tasks) != len(task_orders):
             raise TeddyException(f"Some task(s) order are repeated, taskset: {classname}")
 
+        # 设置task index 到teddy_info
+        for task_idx in range(len(teddy_tasks)):
+            teddy_tasks[task_idx].teddy_info['index'] = task_idx
+
         # 放到class_dict
         class_dict['tasks'] = teddy_tasks
+
+        # 确定task调度模式
+        if 'task_schedule_mode' not in class_dict:
+            class_dict['task_schedule_mode'] = TeddyTaskScheduleMode.Sequential
+        task_schedule_mode: TeddyTaskScheduleMode = class_dict['task_schedule_mode']
+        if task_schedule_mode not in TeddyTaskScheduleMode:
+            raise TeddyException(f'Invalid task schedule mode {task_schedule_mode} in taskset: {classname}')
+
+        # 针对"定序调度配置", 进行标准化及校验
+        if task_schedule_mode == TeddyTaskScheduleMode.Fixed:
+            if 'fixed_task_list' not in class_dict:
+                class_dict['fixed_task_list'] = [teddy_task.teddy_info['index'] for teddy_task in teddy_tasks]
+            else:
+                fixed_task_list = class_dict['fixed_task_list']
+                if not isinstance(fixed_task_list, (list, tuple)):
+                    raise TeddyException(f'<fixed_task_list> must be a list or tuple, taskset: {classname}')
+
+                normalized_fixed_task_list = []
+                for fixed_task in fixed_task_list:
+                    for task in teddy_tasks:
+                        if (isinstance(fixed_task, int) and
+                                fixed_task == task.teddy_info['order']):
+                            normalized_fixed_task_list.append(task.teddy_info['index'])
+                            break
+                        elif (isinstance(fixed_task, str) and
+                                fixed_task == task.teddy_info['name']):
+                            normalized_fixed_task_list.append(task.teddy_info['index'])
+                            break
+                if len(normalized_fixed_task_list) != len(fixed_task_list):
+                    raise TeddyException(f'Some tasks in the <fixed_task_list> '
+                                         f'are not configured correctly, taskset: {classname}')
+                class_dict['fixed_task_list'] = normalized_fixed_task_list
+
+            if not class_dict['fixed_task_list']:
+                raise TeddyException(f'<fixed_task_list> config is empty, taskset: {classname}')
 
         return type.__new__(mcs, classname, bases, class_dict)
 
@@ -80,7 +133,11 @@ class TeddyTaskSet(TaskSet, metaclass=TeddyTaskSetMeta):
         """获取当前task"""
         if self._task_index == -1:
             return None
-        return self.tasks[self._task_index]
+
+        if self.__class__.task_schedule_mode == TeddyTaskScheduleMode.Fixed:
+            return self.tasks[self.__class__.fixed_task_list[self._task_index]]
+        else:
+            return self.tasks[self._task_index]
 
     def get_taskset(self, taskset_cls_or_name: Type[TaskSet] | str) -> TaskSet | None:
         """获取指定任务集"""
@@ -217,8 +274,17 @@ class TeddyTaskSet(TaskSet, metaclass=TeddyTaskSetMeta):
 
     # region 内部实现
     def get_next_task(self):
-        self._task_index = (self._task_index + 1) % len(self.tasks)
-        return self.tasks[self._task_index]
+        task_schedule_mode: TeddyTaskScheduleMode = self.__class__.task_schedule_mode
+        if task_schedule_mode == TeddyTaskScheduleMode.Sequential:
+            self._task_index = (self._task_index + 1) % len(self.tasks)
+            return self.tasks[self._task_index]
+        elif task_schedule_mode == TeddyTaskScheduleMode.Randomized:
+            self._task_index = random.randint(0, len(self.tasks) - 1)
+            return self.tasks[self._task_index]
+        else:  # Fixed
+            fixed_task_list: list | tuple = self.__class__.fixed_task_list
+            self._task_index = (self._task_index + 1) % len(fixed_task_list)
+            return self.tasks[fixed_task_list[self._task_index]]
 
     def _locate_task(self,
                      task_order_or_task_name_or_task_method: int | str | Callable[..., None]):
