@@ -150,7 +150,6 @@ class TeddyTaskSet(TaskSet, metaclass=TeddyTaskSetMeta):
         :param fail_desc: 失败描述
         :param stop_user_after_report: 是否在报告失败后, stop user, 默认False
         """
-        assert self.parent.get_cur_taskset() is self
         cur_task = self.get_cur_task()
         assert cur_task is not None
 
@@ -161,24 +160,28 @@ class TeddyTaskSet(TaskSet, metaclass=TeddyTaskSetMeta):
     # endregion
 
     # region jump支持
-    def jump_to_task(self, task_order: int | Callable[..., None], immediately: bool = True) -> None:
+    def jump_to_task(self,
+                     task_order_or_task_name_or_task_method: int | str | Callable[..., None],
+                     immediately: bool = True) -> None:
         """
         跳转到指定任务
-        :param task_order: (optional) 任务顺序
+        :param task_order_or_task_name_or_task_method: (required) 任务编号/任务方法名/任务方法
         :param immediately: (optional) 是否立即跳转
         """
-        self.parent.jump_to_task(task_order, immediately)
+        self.parent.jump_to_task(task_order_or_task_name_or_task_method, immediately)
 
     def jump_to_taskset(self, taskset_cls_or_name: Type[TaskSet] | str,
-                        task_order: int = -1,
+                        task_order_or_task_name_or_task_method: int | str | Callable[..., None] | None = None,
                         immediately: bool = True) -> None:
         """
         跳转到指定任务集
         :param taskset_cls_or_name: (required) 任务集名字或任务集类
-        :param task_order: (optional): 任务顺序, 如为-1, 将使用目标任务集的第一个任务
+        :param task_order_or_task_name_or_task_method: (required) 任务编号/任务(方法)名/任务方法, 不指定为第一个编号的任务
         :param immediately: (optional): 是否立即跳转
         """
-        self.parent.jump_to_taskset(taskset_cls_or_name, task_order, immediately)
+        self.parent.jump_to_taskset(taskset_cls_or_name,
+                                    task_order_or_task_name_or_task_method,
+                                    immediately)
     # endregion
 
     # region 日志输出支持
@@ -217,12 +220,25 @@ class TeddyTaskSet(TaskSet, metaclass=TeddyTaskSetMeta):
         self._task_index = (self._task_index + 1) % len(self.tasks)
         return self.tasks[self._task_index]
 
-    def _locate_task(self, task_order):
+    def _locate_task(self,
+                     task_order_or_task_name_or_task_method: int | str | Callable[..., None]):
         """定位task order"""
-        for task_idx in range(len(self.tasks)):
-            if self.tasks[task_idx].teddy_info['order'] == task_order:
-                return task_idx
-        return -1
+        if callable(task_order_or_task_name_or_task_method):  # 方法, 直接访问teddy info得到task idx
+            return task_order_or_task_name_or_task_method.teddy_info['index']
+        elif isinstance(task_order_or_task_name_or_task_method, str):  # 方法名, 遍历得到task idx
+            for task in self.tasks:
+                if task.__name__ == task_order_or_task_name_or_task_method:
+                    return task.teddy_info['index']
+        elif isinstance(task_order_or_task_name_or_task_method, int):  # task order, 遍历得到task idx
+            for task in self.tasks:
+                teddy_info = task.teddy_info
+                if teddy_info['order'] == task_order_or_task_name_or_task_method:
+                    return teddy_info['index']
+        elif task_order_or_task_name_or_task_method is None:  # None, 取第一个task
+            return 0
+
+        raise TeddyException(f'Not found task <{task_order_or_task_name_or_task_method}> '
+                             f'in taskset: {self.__class__.__name__}')
 
     def _report_send_or_recv(self,
                              msg_type: int,
@@ -321,20 +337,17 @@ class TeddyTopTaskSet(TaskSet, metaclass=TeddyTopTaskSetMeta):
                 return taskset
         return None
 
-    def jump_to_task(self, task_order: int | Callable[..., None], immediately: bool = True) -> None:
+    def jump_to_task(self,
+                     task_order_or_task_name_or_task_method: int | str | Callable[..., None],
+                     immediately: bool = True) -> None:
         """
         跳转到指定任务
-        :param task_order: (required) 任务编号
+        :param task_order_or_task_name_or_task_method: (required) 任务编号/任务(方法)名/任务方法
         :param immediately: (optional) 是否立刻跳转, 即不sleep
         """
         # 定位task
-        if callable(task_order):
-            task_order = task_order.teddy_info['order']
-
         taskset = self.get_cur_taskset()
-        task_idx = taskset._locate_task(task_order)
-        if task_idx == -1:
-            raise Teddy_InvalidTaskOrder(f'Invalid task order, taskset: {taskset}, order: {task_order}')
+        task_idx = taskset._locate_task(task_order_or_task_name_or_task_method)
 
         # 上报当前task执行信息
         cur_task = taskset.get_cur_task()
@@ -357,27 +370,22 @@ class TeddyTopTaskSet(TaskSet, metaclass=TeddyTopTaskSetMeta):
             raise RescheduleTask()
 
     def jump_to_taskset(self, taskset_cls_or_name: Type[TeddyTaskSet] | str,
-                        task_order: int = -1,
+                        task_order_or_task_name_or_task_method: int | str | Callable[..., None] | None = None,
                         immediately: bool = True) -> None:
         """
         跳转到指定任务集
         :param taskset_cls_or_name: (required) 任务集名字或类
-        :param task_order: (optional) 任务编号
+        :param task_order_or_task_name_or_task_method: (required) 任务编号/任务(方法)名/任务方法, 不指定为第一个编号的任务
         :param immediately: (optional) 是否立刻跳转, 即不sleep
         """
         # 定位taskset
         taskset_idx = self._locate_taskset(taskset_cls_or_name)
         if taskset_idx == -1:
-            raise Teddy_InvalidTaskSet(f'Invalid taskset: {taskset_cls_or_name}')
+            raise Teddy_InvalidTaskSet(f'Not found taskset: {taskset_cls_or_name}')
+        taskset = self._taskset_insts[taskset_idx]
 
         # 定位task
-        task_idx = 0
-        taskset = self._taskset_insts[taskset_idx]
-        if task_order != -1:
-            task_idx = taskset._locate_task(task_order)
-        if task_idx == -1:
-            raise Teddy_InvalidTaskOrder(f'Invalid task order, '
-                                         f'taskset: {taskset_cls_or_name}, order: {task_order}')
+        task_idx = taskset._locate_task(task_order_or_task_name_or_task_method)
 
         # 上报当前task执行信息
         cur_taskset = self.get_cur_taskset()
@@ -521,7 +529,9 @@ def teddy_taskset(taskset_desc: str | Type[TeddyTaskSet] = None):
             task = taskset_cls.tasks[task_idx]
             wrapped_task = functools.partial(task_wrapper, task)
             wrapped_task.__name__ = task.__name__
-            wrapped_task.teddy_info = getattr(task, 'teddy_info')
+            task_teddy_info = getattr(task, 'teddy_info')
+            task_teddy_info['index'] = task_idx
+            wrapped_task.teddy_info = task_teddy_info
 
             taskset_cls.task = wrapped_task
             taskset_cls.tasks[task_idx] = wrapped_task

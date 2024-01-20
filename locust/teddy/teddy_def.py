@@ -44,6 +44,7 @@ class TeddyInfo(TypedDict):
     name: str  # 名, 一般为class name or method name
     desc: Optional[str]  # 描述, 通过特定annotation的desc参数指定
     order: Optional[int]  # 顺序, 只在Task的Teddy类型有效
+    index: Optional[int]  # 任务在任务集中的下标索引
     beg_exec_time: Optional[float]  # 开始执行时间, 只在Task的Teddy类型有效
     total_send_bytes: Optional[int]  # 总发送的字节数, 只在Task的Teddy类型有效
     total_recv_bytes: Optional[int]  # 总接收的字节数, 只在Task的Teddy类型有效
