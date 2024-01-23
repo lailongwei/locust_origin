@@ -3,7 +3,6 @@ import inspect
 import logging
 import random
 import time
-from enum import Enum
 from typing import Type, Callable, cast
 
 import locust
@@ -16,26 +15,11 @@ from ..exception import (
     RescheduleTask)
 from ..user.task import TaskSet, TaskSetMeta
 
-from .teddy_def import TeddyInfo, TeddyType, TeddyCfg, TeddyMsgType
-from .teddy_exception import (
-    TeddyException,
-    Teddy_InvalidTaskOrder,
-    Teddy_InvalidTaskSet)
+from .teddy_def import TeddyInfo, TeddyType, TeddyMsgType, TeddyTaskScheduleMode
+from .teddy_exception import TeddyException
 
 """Teddy Task类型"""
 TeddyTaskT = Callable[..., None]
-
-
-class TeddyTaskScheduleMode(Enum):
-    """Teddy任务调度模式"""
-    Sequential = 1
-    """顺序调度"""
-
-    Randomized = 2
-    """随机调度"""
-
-    Fixed = 3
-    """定序调度(需要提供确定序列, id/task (method) name)"""
 
 
 class TeddyTaskSetMeta(TaskSetMeta):
@@ -420,9 +404,25 @@ class TeddyTopTaskSet(TaskSet, metaclass=TeddyTopTaskSetMeta):
         taskset._report_task_exec_finish(cur_task)
 
         # 更新task索引信息
-        taskset._task_index = task_idx
         del taskset._task_queue[:]
-        taskset._task_queue.append(taskset.tasks[task_idx])
+        taskset_cls = taskset.__class__
+        if taskset_cls.task_schedule_mode == TeddyTaskScheduleMode.Fixed:
+            found_in_fixed_task_list = False
+            fixed_task_list = taskset_cls.fixed_task_list
+            for fixed_task_idx in range(len(fixed_task_list)):
+                if fixed_task_list[fixed_task_idx] == task_idx:
+                    found_in_fixed_task_list = True
+                    taskset._task_index = fixed_task_idx
+                    taskset._task_queue.append(taskset.tasks[fixed_task_list[fixed_task_idx]])
+                    break
+
+            if not found_in_fixed_task_list:
+                raise TeddyException(f'TaskSet {taskset_cls.__name__} schedule mode is <Fixed>, '
+                                     f'could not jump to not in <fixed_task_list> task: '
+                                     f'{task_order_or_task_name_or_task_method}')
+        else:
+            taskset._task_index = task_idx
+            taskset._task_queue.append(taskset.tasks[task_idx])
 
         # Log
         task = taskset.tasks[task_idx]
@@ -447,7 +447,7 @@ class TeddyTopTaskSet(TaskSet, metaclass=TeddyTopTaskSetMeta):
         # 定位taskset
         taskset_idx = self._locate_taskset(taskset_cls_or_name)
         if taskset_idx == -1:
-            raise Teddy_InvalidTaskSet(f'Not found taskset: {taskset_cls_or_name}')
+            raise TeddyException(f'Not found taskset: {taskset_cls_or_name}')
         taskset = self._taskset_insts[taskset_idx]
 
         # 定位task
@@ -584,7 +584,7 @@ def teddy_taskset(taskset_desc: str | Type[TeddyTaskSet] = None):
             task_teddy_info['stop_user_after_fail'] = False
 
             # Log
-            teddy_logger.debug(f'{taskset}: Exec task {task.__name__}')
+            teddy_logger.debug(f'{taskset}: Exec task: {task.__name__}')
 
             # 执行
             task(taskset)

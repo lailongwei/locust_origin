@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import TypedDict, Optional, List
 
 
@@ -30,6 +31,18 @@ class TeddyPairedMsgRecord(TypedDict):
     recv_msg_size: int  # 接收消息大小
     recv_msg_status: int  # 接收消息status
     cost_time: float  # 耗时, 秒为单位
+
+
+class TeddyTaskScheduleMode(Enum):
+    """Teddy任务调度模式"""
+    Sequential = 1
+    """顺序调度"""
+
+    Randomized = 2
+    """随机调度"""
+
+    Fixed = 3
+    """定序调度(需要提供确定序列, id/task (method) name)"""
 
 
 class TeddyType:

@@ -1,8 +1,8 @@
-from typing import TypedDict, Optional
 from .teddy_def import (
     TeddyCfg,
     TeddyType,
-    TeddyInfo)
+    TeddyInfo,
+    TeddyTaskScheduleMode)
 from .teddy_log import (
     teddy_logger,
     network_logger)
@@ -14,8 +14,7 @@ from .teddy_task import (
     TeddyTaskSet,
     TeddyTaskSetMeta,
     teddy_task,
-    teddy_taskset,
-    TeddyTaskScheduleMode)
+    teddy_taskset)
 from .teddy_session import (
     TeddySessionState,
     TeddySession)
@@ -30,6 +29,7 @@ __all__ = (
     "TeddyCfg",
     "TeddyType",
     "TeddyInfo",
+    "TeddyTaskScheduleMode",
 
     "teddy_logger",
     "network_logger",
