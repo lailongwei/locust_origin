@@ -28,7 +28,7 @@ def setup_logging(loglevel, logfile=None, console_loglevel: str | None = None, f
         file_loglevel = loglevel
 
     min_loglevel_value = min(logging.getLevelName(console_loglevel), logging.getLevelName(file_loglevel))
-    if logging.getLevelName(loglevel) < min_loglevel_value:
+    if logging.getLevelName(loglevel) > min_loglevel_value:
         loglevel = logging.getLevelName(min_loglevel_value)
 
     LOGGING_CONFIG = {
