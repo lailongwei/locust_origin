@@ -395,34 +395,15 @@ class TeddyTopTaskSet(TaskSet, metaclass=TeddyTopTaskSetMeta):
         :param task_order_or_task_name_or_task_method: (required) 任务编号/任务(方法)名/任务方法
         :param immediately: (optional) 是否立刻跳转, 即不sleep
         """
-        # 定位task
-        taskset = self.get_cur_taskset()
-        task_idx = taskset._locate_task(task_order_or_task_name_or_task_method)
-
         # 上报当前task执行信息
+        taskset = self.get_cur_taskset()
         cur_task = taskset.get_cur_task()
         taskset._report_task_exec_finish(cur_task)
 
+        # 定位task
+        task_idx = taskset._locate_task(task_order_or_task_name_or_task_method)
         # 更新task索引信息
-        del taskset._task_queue[:]
-        taskset_cls = taskset.__class__
-        if taskset_cls.task_schedule_mode == TeddyTaskScheduleMode.Fixed:
-            found_in_fixed_task_list = False
-            fixed_task_list = taskset_cls.fixed_task_list
-            for fixed_task_idx in range(len(fixed_task_list)):
-                if fixed_task_list[fixed_task_idx] == task_idx:
-                    found_in_fixed_task_list = True
-                    taskset._task_index = fixed_task_idx
-                    taskset._task_queue.append(taskset.tasks[fixed_task_list[fixed_task_idx]])
-                    break
-
-            if not found_in_fixed_task_list:
-                raise TeddyException(f'TaskSet {taskset_cls.__name__} schedule mode is <Fixed>, '
-                                     f'could not jump to not in <fixed_task_list> task: '
-                                     f'{task_order_or_task_name_or_task_method}')
-        else:
-            taskset._task_index = task_idx
-            taskset._task_queue.append(taskset.tasks[task_idx])
+        self._update_task_index_info(taskset, task_idx, task_order_or_task_name_or_task_method)
 
         # Log
         task = taskset.tasks[task_idx]
@@ -450,19 +431,20 @@ class TeddyTopTaskSet(TaskSet, metaclass=TeddyTopTaskSetMeta):
             raise TeddyException(f'Not found taskset: {taskset_cls_or_name}')
         taskset = self._taskset_insts[taskset_idx]
 
-        # 定位task
-        task_idx = taskset._locate_task(task_order_or_task_name_or_task_method)
+        # 如目标taskset为自身, 使用jump_to_task()完成跳转
+        cur_taskset = self.get_cur_taskset()
+        if cur_taskset is taskset:
+            self.jump_to_task(task_order_or_task_name_or_task_method, immediately)
+            return
 
         # 上报当前task执行信息
-        cur_taskset = self.get_cur_taskset()
         cur_task = cur_taskset.get_cur_task()
         cur_taskset._report_task_exec_finish(cur_task)
 
+        # 定位task
+        task_idx = taskset._locate_task(task_order_or_task_name_or_task_method)
         # 更新taskset索引信息+队列信息
-        taskset._task_index = task_idx
-        del taskset._task_queue[:]
-        taskset._task_queue.append(taskset.tasks[task_idx])
-
+        self._update_task_index_info(taskset, task_idx, task_order_or_task_name_or_task_method)
         # 更新top taskset索引信息+队列信息
         self._taskset_index = taskset_idx
         del self._task_queue[:]
@@ -498,6 +480,31 @@ class TeddyTopTaskSet(TaskSet, metaclass=TeddyTopTaskSetMeta):
                 return taskset_idx
 
         return -1
+
+    def _update_task_index_info(self,
+                                taskset: TeddyTaskSet,
+                                task_idx: int,
+                                task_order_or_task_name_or_task_method: int | str | Callable[..., None]):
+        """更新task索引信息, 在jump_to_task/jump_to_taskset时调用"""
+        del taskset._task_queue[:]
+        taskset_cls = taskset.__class__
+        if taskset_cls.task_schedule_mode == TeddyTaskScheduleMode.Fixed:
+            found_in_fixed_task_list = False
+            fixed_task_list = taskset_cls.fixed_task_list
+            for fixed_task_idx in range(len(fixed_task_list)):
+                if fixed_task_list[fixed_task_idx] == task_idx:
+                    found_in_fixed_task_list = True
+                    taskset._task_index = fixed_task_idx
+                    taskset._task_queue.append(taskset.tasks[fixed_task_list[fixed_task_idx]])
+                    break
+
+            if not found_in_fixed_task_list:
+                raise TeddyException(f'TaskSet {taskset_cls.__name__} schedule mode is <Fixed>, '
+                                     f'could not jump to not in <fixed_task_list> task: '
+                                     f'{task_order_or_task_name_or_task_method}')
+        else:
+            taskset._task_index = task_idx
+            taskset._task_queue.append(taskset.tasks[task_idx])
 
 
 def teddy_task(task_order: int, /, *, task_desc: str | None = None) -> TeddyTaskT:
