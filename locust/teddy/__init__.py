@@ -1,15 +1,16 @@
 from .teddy_def import (
     TeddyCfg,
+    TeddyTaskT,
+    TeddyMsgType,
     TeddyType,
     TeddyInfo,
+    TeddyTaskSetType,
     TeddyTaskScheduleMode)
 from .teddy_log import (
     teddy_logger,
     network_logger)
 from .teddy_exception import (
-    TeddyException,
-    Teddy_InvalidTaskOrder,
-    Teddy_InvalidTaskSet)
+    TeddyException)
 from .teddy_task import (
     TeddyTaskSet,
     TeddyTaskSetMeta,
@@ -29,14 +30,13 @@ __all__ = (
     "TeddyCfg",
     "TeddyType",
     "TeddyInfo",
+    "TeddyTaskSetType",
     "TeddyTaskScheduleMode",
 
     "teddy_logger",
     "network_logger",
 
     "TeddyException",
-    "Teddy_InvalidTaskOrder",
-    "Teddy_InvalidTaskSet",
 
     "TeddyTaskSet",
     "TeddyTaskSetMeta",

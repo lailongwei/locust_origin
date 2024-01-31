@@ -1,11 +1,14 @@
 import functools
+import inspect
 import logging
+import random
 import time
-from typing import Type, Union, Dict, Optional
+from typing import Type, List
 
-from . import teddy_logger, TeddySession
 from ..user.users import UserMeta, User
 
+from . import teddy_logger, TeddySession
+from .teddy_def import TeddyTaskSetType, TeddyTaskScheduleMode
 from .teddy_exception import TeddyException
 from .teddy_task import TeddyTaskSet, TeddyTopTaskSet
 from .teddy_user_mgr import teddy_user_mgr
@@ -36,10 +39,80 @@ class TeddyUserMeta(UserMeta):
 
             teddy_tasksets.append(taskset)
             teddy_logger.debug(f'Find taskset: {taskset.__class__.__name__}')
-
         if not teddy_tasksets:
             raise TeddyException('Please use the <tasks> property to specific one or more taskset(s)')
+        tasksets = teddy_tasksets
+
+        # 按taskset type正序排序
+        tasksets.sort(key=lambda ts: ts.teddy_info['taskset_type'].value)
+        for taskset_index in range(len(tasksets)):
+            tasksets[taskset_index].teddy_info['index'] = taskset_index
+
+        # 更新user.tasks
         class_dict['tasks'] = teddy_tasksets
+
+        # 分taskset type存储
+        class_dict['taskset_type_2_tasks'] = {}
+        for taskset_type in TeddyTaskSetType.__members__.values():
+            class_dict['taskset_type_2_tasks'][taskset_type] = \
+                [taskset for taskset in tasksets if taskset.teddy_info['taskset_type'] == taskset_type]
+
+        # 确定任务taskset调度模式
+        taskset_schedule_mode = class_dict.setdefault('taskset_schedule_mode', {})
+        if not isinstance(taskset_schedule_mode, dict):
+            raise TeddyException(f'User <taskset_schedule_mode> must be a dict, user: {classname}')
+
+        for taskset_type in TeddyTaskSetType.__members__.values():
+            if taskset_type not in class_dict['taskset_schedule_mode']:
+                class_dict['taskset_schedule_mode'][taskset_type] = \
+                    TeddyTaskSetType.get_default_schedule_mode(taskset_type)
+            elif class_dict['taskset_schedule_mode'][taskset_type] not in TeddyTaskScheduleMode:
+                raise TeddyException(f'Invalid taskset schedule mode, '
+                                     f'user: {classname}, '
+                                     f'taskset_type: {taskset_type}, '
+                                     f'schedule_mode: {class_dict["taskset_schedule_mode"][taskset_type]}')
+
+        # 标准化定序调度模式下的定序列表: fixed_taskset_list
+        for taskset_type in TeddyTaskSetType.__members__.values():
+            # 非Fixed模式, continue
+            taskset_schedule_mode: TeddyTaskScheduleMode = class_dict['taskset_schedule_mode'][taskset_type]
+            if not TeddyTaskScheduleMode.is_fixed_schedule_mode(taskset_schedule_mode):
+                continue
+
+            # 得到fixed_taskset_list
+            fixed_taskset_list: List[Type[TeddyTaskSet]] = \
+                class_dict.setdefault('fixed_taskset_list', {}).setdefault(taskset_type, [])
+            if not isinstance(fixed_taskset_list, list):
+                fixed_taskset_list = list(fixed_taskset_list)
+                class_dict['fixed_taskset_list'][taskset_type] = fixed_taskset_list
+
+            # 标准化fixed_taskset_list
+            type_tasksets: List[Type[TeddyTaskSet]] = class_dict[taskset_type.name.lower() + '_tasks']
+            if not fixed_taskset_list:  # 空: 自动填充此taskset类型的tasksets
+                fixed_taskset_list.extend(type_tasksets)
+            else:  # 非空: 执行标准化
+                for taskset_index in range(len(fixed_taskset_list)):
+                    ts = fixed_taskset_list[taskset_index]
+                    if isinstance(ts, str):
+                        for taskset in type_tasksets:
+                            if taskset.__name__ == ts:
+                                fixed_taskset_list[taskset_index] = taskset
+                                break
+                    elif (not inspect.isclass(ts) or
+                            not issubclass(ts, TeddyTaskSet)):
+                        raise TeddyException(f'Invalid <fixed_taskset_list> config item, '
+                                             f'user: {classname}, '
+                                             f'taskset_type: {taskset_type}, '
+                                             f'config_item: {ts}')
+
+            # 如 标准化后还为空, raise exception
+            if not fixed_taskset_list:
+                raise TeddyException(f'<fixed_taskset_list> is empty, user: {classname},'
+                                     f'taskset_type: {taskset_type}')
+
+        # 如未设置独占调度, 设置默认值(默认: True)
+        if 'exclusive_schedule' not in class_dict:
+            class_dict['exclusive_schedule'] = True
 
         # 注入taskset.cfg配置项
         user_cfg = class_dict.get('cfg')
@@ -56,11 +129,14 @@ class TeddyUserMeta(UserMeta):
                 setattr(taskset, 'cfg', None)
 
         # 注入user id生成支持
-        class_dict['_user_id_begin'] = int(time.time()) << 32
+        # reserved | timestamp |  seq  |
+        #   22bit  |   32bit   | 10bit |
+        class_dict['_user_id_seq'] = 0
 
         def _gen_user_id(the_self):
-            user_id = the_self.__class__._user_id_begin + 1
-            the_self.__class__._user_id_begin = user_id
+            user_cls = the_self.__class__
+            user_cls._user_id_seq += 1
+            user_id = (int(time.time()) << 10) | user_cls._user_id_seq
             return user_id
         class_dict['_gen_user_id'] = _gen_user_id
 
@@ -175,14 +251,14 @@ class TeddyUser(User, metaclass=TeddyUserMeta):
     # endregion
 
     # region task/taskset操作
-    def get_cur_taskset(self) -> Union[TeddyTaskSet, None]:
+    def get_cur_taskset(self) -> TeddyTaskSet | None:
         """
         获取当前任务集
         :return: 当前任务对象, 如不存在或未启动, 返回None
         """
         return self._taskset_instance.get_cur_taskset()
 
-    def get_taskset(self, taskset_cls_or_name: Type[TeddyTaskSet] | str) -> Union[TeddyTaskSet, None]:
+    def get_taskset(self, taskset_cls_or_name: Type[TeddyTaskSet] | str) -> TeddyTaskSet | None:
         """
         获取指定任务集
         :param taskset_cls_or_name: (optional) 任务集类或类名
@@ -259,16 +335,11 @@ class TeddyUser(User, metaclass=TeddyUserMeta):
 
     # region __str__
     def __str__(self):
-        if self.session is not None:
-            session_info = f'({self.session.session_id}, {self.session.session_state})'
-        else:
-            session_info = '(No session)'
-
-        # usr[state, id|logic_id|session]
+        # usr[state|id:xx|lid:xx|sid:xx]
         str_repr = (f'{self.__class__.__name__}'
-                    f'[{self._state}, '
-                    f'id: {self._user_id}|'
-                    f'logic_id: {self._user_logic_id}'
-                    f'|session: {session_info}]')
+                    f'[{self._state}'
+                    f'|id:{self._user_id}'
+                    f'|lid:{self._user_logic_id}'
+                    f'|sid:{self.session.session_id if self.session is not None else -1}]')
         return str_repr
     # endregion

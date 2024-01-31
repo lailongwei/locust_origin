@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import TypedDict, Optional, List
+from typing import TypedDict, Optional, List, Callable
 
 
 class TeddyCfg:
@@ -9,28 +9,45 @@ class TeddyCfg:
     debug = False
 
 
-class TeddyMsgType:
+TeddyTaskT = Callable[..., None]
+"""Teddy Task类型"""
+
+
+class TeddyMsgType(Enum):
     """Teddy消息类型"""
-    Send = 1  # 发送类型Msg
-    Recv = 2  # 接收类型Msg
+    Send = 1
+    """发送类型Msg"""
+
+    Recv = 2
+    """接收类型Msg"""
 
 
 class TeddyMsgRecord(TypedDict):
     """Teddy消息记录"""
-    msg_type: int  # 网络消息类型, 见<TeddyNetMsgType>
-    msg_id: int  # 消息id/opcode/cmd_id
-    msg_len: int  # 消息长度
-    status: int  # 消息状态码
+    msg_type: int
+    """网络消息类型, 见<TeddyNetMsgType>"""
+    msg_id: int
+    """消息id/opcode/cmd_id"""
+    msg_len: int
+    """消息长度"""
+    status: int
+    """消息状态码"""
 
 
 class TeddyPairedMsgRecord(TypedDict):
     """Teddy Paired消息记录"""
-    send_msg_id: int  # 发送消息Id
-    send_msg_size: int  # 发送消息大小
-    recv_msg_id: int  # 接收消息Id
-    recv_msg_size: int  # 接收消息大小
-    recv_msg_status: int  # 接收消息status
-    cost_time: float  # 耗时, 秒为单位
+    send_msg_id: int
+    """发送消息Id"""
+    send_msg_size: int
+    """发送消息大小"""
+    recv_msg_id: int
+    """接收消息Id"""
+    recv_msg_size: int
+    """接收消息大小"""
+    recv_msg_status: int
+    """接收消息status"""
+    cost_time: float
+    """耗时, 秒为单位"""
 
 
 class TeddyTaskScheduleMode(Enum):
@@ -41,23 +58,71 @@ class TeddyTaskScheduleMode(Enum):
     Randomized = 2
     """随机调度"""
 
-    Fixed = 3
-    """定序调度(需要提供确定序列, id/task (method) name)"""
+    Fixed_Sequential = 3
+    """
+    定序的顺序调度, 需要提供确定序列
+    - 针对TeddyTaskSet, 需要提供fixed_task_list列表
+    - 针对TeddyUser, 需要提供fixed_taskset_list列表
+    """
+
+    Fixed_Randomized = 4
+    """
+    定序的随机调度
+    - 针对TeddyTaskSet, 需要提供fixed_task_list列表
+    - 针对TeddyUser, 需要提供fixed_taskset_list列表
+    """
+
+    @classmethod
+    def is_fixed_schedule_mode(cls, task_schedule_mode: "TeddyTaskScheduleMode") -> bool:
+        """确认给定task schedule mode是否是定序模式"""
+        return task_schedule_mode in (cls.Fixed_Sequential, cls.Fixed_Randomized)
+
+    @classmethod
+    def is_randomomized_schedule_mode(cls, task_schedule_mode: "TeddyTaskScheduleMode") -> bool:
+        """确认给定task schedule mode是否是随机模式"""
+        return task_schedule_mode in (cls.Randomized, cls.Fixed_Randomized)
 
 
-class TeddyType:
+class TeddyTaskSetType(Enum):
+    """Teddy任务集类型"""
+    Base = 1
+    """
+    基础任务集
+    默认调度策略: TeddyTaskScheduleMode.Sequential
+    """
+
+    Test = 2
+    """
+    测试任务集
+    默认调度策略: TeddyTaskScheduleMode.Randomized
+    """
+
+    @classmethod
+    def get_default_schedule_mode(cls, taskset_type: "TeddyTaskSetType") -> TeddyTaskScheduleMode:
+        """获取指定taskset类型的默认调度模式"""
+        if taskset_type == cls.Test:
+            return TeddyTaskScheduleMode.Randomized
+        else:  # Non-Test
+            return TeddyTaskScheduleMode.Sequential
+
+
+class TeddyType(Enum):
     """Teddy扩展的元素类型"""
-    TaskSet = 1  # 任务集, 指示是一个Teddy任务集
-    Task = 2  # 任务, 属于任务集
+    TaskSet = 1
+    """任务集, 指示是一个Teddy任务集"""
+
+    Task = 2
+    """任务, 属于任务集"""
 
 
 class TeddyInfo(TypedDict):
     """描述一个Teddy信息"""
-    teddy_type: int  # Teddy类型, 见TeddyType
+    teddy_type: TeddyType  # Teddy类型, 见TeddyType
     name: str  # 名, 一般为class name or method name
     desc: Optional[str]  # 描述, 通过特定annotation的desc参数指定
+    index: int  # 任务在任务集中的下标索引 or 任务集在user中的索引(排序后)
+    taskset_type: Optional[TeddyTaskSetType]  # 任务集类型, 只在TaskSet的Teddy类型有效
     order: Optional[int]  # 顺序, 只在Task的Teddy类型有效
-    index: Optional[int]  # 任务在任务集中的下标索引
     beg_exec_time: Optional[float]  # 开始执行时间, 只在Task的Teddy类型有效
     total_send_bytes: Optional[int]  # 总发送的字节数, 只在Task的Teddy类型有效
     total_recv_bytes: Optional[int]  # 总接收的字节数, 只在Task的Teddy类型有效
@@ -66,14 +131,3 @@ class TeddyInfo(TypedDict):
     paired_msgs: Optional[List[TeddyPairedMsgRecord]]  # 已进行的Paired Messages
     fail: Exception | str | None  # 失败信息, 只在Task的Teddy类型有效
     stop_user_after_fail: Optional[bool]  # 失败有失败信息, 是否在上报后停止此User
-
-
-class TeddyMsgReport(TypedDict):
-    msg_type: int  # 消息类型,
-
-
-class TeddyReport(TypedDict):
-    """Teddy报告"""
-    task_start_perf_counter: float  # 任务启动时的perf counter
-
-

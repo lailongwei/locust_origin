@@ -20,12 +20,12 @@ class TeddySession:
         self._session_id = self.__class__._max_session_id
 
     @property
-    def user(self):
+    def user(self) -> "TeddyUser":
         """获得所属User对象"""
         return self._user
 
     @property
-    def session_id(self):
+    def session_id(self) -> int:
         """传话Id"""
         return self._session_id
 
@@ -43,7 +43,7 @@ class TeddySession:
         """初始化"""
         raise NotImplemented()
 
-    def destroy(self):
+    def destroy(self) -> None:
         """销毁"""
         raise NotImplemented()
 
