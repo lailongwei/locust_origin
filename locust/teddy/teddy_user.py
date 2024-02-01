@@ -83,11 +83,12 @@ class TeddyUserMeta(UserMeta):
             fixed_taskset_list: List[Type[TeddyTaskSet]] = \
                 class_dict.setdefault('fixed_taskset_list', {}).setdefault(taskset_type, [])
             if not isinstance(fixed_taskset_list, list):
-                fixed_taskset_list = list(fixed_taskset_list)
+                fixed_taskset_list = []
+                fixed_taskset_list.extend(fixed_taskset_list)
                 class_dict['fixed_taskset_list'][taskset_type] = fixed_taskset_list
 
             # 标准化fixed_taskset_list
-            type_tasksets: List[Type[TeddyTaskSet]] = class_dict[taskset_type.name.lower() + '_tasks']
+            type_tasksets: List[Type[TeddyTaskSet]] = class_dict['taskset_type_2_tasks'][taskset_type]
             if not fixed_taskset_list:  # 空: 自动填充此taskset类型的tasksets
                 fixed_taskset_list.extend(type_tasksets)
             else:  # 非空: 执行标准化
@@ -109,6 +110,16 @@ class TeddyUserMeta(UserMeta):
             if not fixed_taskset_list:
                 raise TeddyException(f'<fixed_taskset_list> is empty, user: {classname},'
                                      f'taskset_type: {taskset_type}')
+
+        # 分taskset_type存储可调度的tasksets
+        class_dict['taskset_type_2_schedulable_tasks'] = {}
+        for taskset_type in TeddyTaskSetType.__members__.values():
+            taskset_schedule_mode: TeddyTaskScheduleMode = class_dict['taskset_schedule_mode'][taskset_type]
+            if TeddyTaskScheduleMode.is_fixed_schedule_mode(taskset_schedule_mode):
+                schedulable_tasksets = class_dict['fixed_taskset_list'][taskset_type]
+            else:
+                schedulable_tasksets = class_dict['taskset_type_2_tasks'][taskset_type]
+            class_dict['taskset_type_2_schedulable_tasks'][taskset_type] = schedulable_tasksets
 
         # 如未设置独占调度, 设置默认值(默认: True)
         if 'exclusive_schedule' not in class_dict:

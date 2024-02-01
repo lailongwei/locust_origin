@@ -488,13 +488,12 @@ class TeddyTopTaskSet(TaskSet, metaclass=TeddyTopTaskSetMeta):
         # 初始化: _cur_taskset_type/_cur_taskset_schedule_mode/_scheduling_taskset_insts
         user_cls = user.__class__
         for taskset_type in TeddyTaskSetType.__members__.values():
-            taskset_clses = user_cls.taskset_type_2_tasks[taskset_type]
+            taskset_clses = user_cls.taskset_type_2_schedulable_tasks[taskset_type]
             if taskset_clses:
                 self._cur_taskset_type = taskset_type
-                self._cur_taskst_schedule_mode = user_cls.taskset_schedule_mode[taskset_type]
-                self._scheduling_tasksets.extend(
-                    taskset for taskset in self._tasksets if taskset.__class__ in taskset_clses)
-        assert self._scheduling_tasksets
+                self._cur_taskset_schedule_mode = user_cls.taskset_schedule_mode[taskset_type]
+                self._update_scheduling_tasksets()
+                break
 
     @property
     def tasksets(self) -> [TeddyTaskSet]:
@@ -580,8 +579,8 @@ class TeddyTopTaskSet(TaskSet, metaclass=TeddyTopTaskSetMeta):
         else:
             to_taskset = self._locate_taskset(taskset_cls_or_taskset_name)
 
-        # 如目标taskset为自身, 使用jump_to_task()完成跳转
-        if to_taskset is cur_taskset:
+        # 如目标taskset为自身 且 为业务主动调用, 使用jump_to_task()完成跳转
+        if to_taskset is cur_taskset and to_taskset_index == -1:
             self.jump_to_task(task_order_or_task_name_or_task_method, immediately, report_task_exec_finish)
             return
 
@@ -603,10 +602,7 @@ class TeddyTopTaskSet(TaskSet, metaclass=TeddyTopTaskSetMeta):
             if to_taskset_type != cur_taskset.__class__.teddy_info['taskset_type']:
                 self._cur_taskset_type = to_taskset_type
                 self._cur_taskset_schedule_mode = user_cls.taskset_schedule_mode[self._cur_taskset_type]
-                taskset_clses = user_cls.taskset_type_2_tasks[self._cur_taskset_type]
-                self._scheduling_tasksets.clear()
-                self._scheduling_tasksets.extend(
-                    taskset for taskset in self._tasksets if taskset.__class__ in taskset_clses)
+                self._update_scheduling_tasksets()
 
             # 定位到此taskset的index, 并更新_cur_taskset_index
             for taskset_index in range(len(self._scheduling_tasksets)):
@@ -651,7 +647,7 @@ class TeddyTopTaskSet(TaskSet, metaclass=TeddyTopTaskSetMeta):
         # - 得到user_cls/taskset_schedule_mode
         user_cls = self.user.__class__
         # - 得到taskset classes
-        taskset_clses = user_cls.taskset_type_2_tasks[taskset_type]
+        taskset_clses = user_cls.taskset_type_2_schedulable_tasks[taskset_type]
         # - 选中taskset
         taskset_schedule_mode: TeddyTaskScheduleMode = user_cls.taskset_schedule_mode[taskset_type]
         if TeddyTaskScheduleMode.is_randomomized_schedule_mode(taskset_schedule_mode):
@@ -697,14 +693,23 @@ class TeddyTopTaskSet(TaskSet, metaclass=TeddyTopTaskSetMeta):
         return taskset
 
     def _get_next_taskset_index(self) -> int:
-        """
-        获取下一个任务集索引
-        :return: 下一个任务集索引
-        """
+        """获取下一个任务集索引"""
         if TeddyTaskScheduleMode.is_randomomized_schedule_mode(self._cur_taskset_schedule_mode):
             return random.randint(0, len(self._scheduling_tasksets) - 1)
         else:
             return (self._cur_taskset_index + 1) % len(self._scheduling_tasksets)
+
+    def _update_scheduling_tasksets(self):
+        """更新调度中的taskset列表"""
+        user_cls = self.user.__class__
+        self._scheduling_tasksets.clear()
+        taskset_clses = user_cls.taskset_type_2_schedulable_tasks[self._cur_taskset_type]
+        for taskset_cls in taskset_clses:
+            for taskset in self._tasksets:
+                if taskset.__class__ is taskset_cls:
+                    self._scheduling_tasksets.append(taskset)
+                    break
+        assert len(self._scheduling_tasksets) == len(taskset_clses)
 
 
 def teddy_task(task_order: int, /, *, task_desc: str | None = None) -> TeddyTaskT:
