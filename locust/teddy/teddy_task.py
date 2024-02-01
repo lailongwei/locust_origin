@@ -288,7 +288,7 @@ class TeddyTaskSet(TaskSet, metaclass=TeddyTaskSetMeta):
         跳转到指定任务集
         :param taskset_cls_or_taskset_name: (required) 任务集名字或任务集类
         :param task_order_or_task_name_or_task_method: (required) 任务编号/任务(方法)名/任务方法, 不指定为第一个编号的任务
-        :param immediately: (optional): 是否立即跳转
+        :param immediately: (optional) 是否立即跳转
         """
         self._parent.jump_to_taskset(taskset_cls_or_taskset_name,
                                      task_order_or_task_name_or_task_method,
