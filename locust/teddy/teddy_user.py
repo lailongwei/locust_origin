@@ -142,13 +142,15 @@ class TeddyUserMeta(UserMeta):
         # 注入user id生成支持
         # reserved | timestamp |  seq  |
         #   22bit  |   32bit   | 10bit |
-        class_dict['_user_id_seq'] = 0
+        class_dict['_user_id_seqs'] = {}
 
         def _gen_user_id(the_self):
+            now_sec = int(time.time())
             user_cls = the_self.__class__
-            user_cls._user_id_seq += 1
-            user_id = (int(time.time()) << 10) | user_cls._user_id_seq
-            return user_id
+            user_id_seq: int = user_cls._user_id_seqs.setdefault(now_sec, 1)
+            user_cls._user_id_seqs[now_sec] = user_id_seq + 1
+            return (now_sec << 10) | user_id_seq
+
         class_dict['_gen_user_id'] = _gen_user_id
 
         # 改写on_start/on_stop, 以实现taskset的on_init/on_destroy调用
