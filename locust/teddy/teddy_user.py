@@ -83,8 +83,7 @@ class TeddyUserMeta(UserMeta):
             fixed_taskset_list: List[Type[TeddyTaskSet]] = \
                 class_dict.setdefault('fixed_taskset_list', {}).setdefault(taskset_type, [])
             if not isinstance(fixed_taskset_list, list):
-                fixed_taskset_list = []
-                fixed_taskset_list.extend(fixed_taskset_list)
+                fixed_taskset_list = list(fixed_taskset_list)
                 class_dict['fixed_taskset_list'][taskset_type] = fixed_taskset_list
 
             # 标准化fixed_taskset_list
@@ -138,6 +137,16 @@ class TeddyUserMeta(UserMeta):
         else:
             for taskset in tasksets:
                 setattr(taskset, 'cfg', None)
+
+        # 注入user seq生成支持
+        class_dict['_max_seq'] = 1
+
+        def _gen_seq(the_self):
+            seq = the_self.__class__._max_seq
+            the_self.__class__._max_seq += 1
+            return seq
+
+        class_dict['_gen_seq'] = _gen_seq
 
         # 注入user id生成支持
         # reserved | timestamp |  seq  |
@@ -199,6 +208,7 @@ class TeddyUser(User, metaclass=TeddyUserMeta):
     # region __init__
     def __init__(self, environment):
         super().__init__(environment)
+        self._seq: int =self._gen_seq()
         self._user_id: int = self._gen_user_id()
         self._user_name: str = ''
         self._user_logic_id = 0
@@ -207,6 +217,11 @@ class TeddyUser(User, metaclass=TeddyUserMeta):
     # endregion
 
     # region properties
+    @property
+    def seq(self):
+        """取得user seq(node节点内唯一)"""
+        return self._seq
+
     @property
     def user_id(self):
         """取得user Id"""
@@ -351,6 +366,7 @@ class TeddyUser(User, metaclass=TeddyUserMeta):
         # usr[state|id:xx|lid:xx|sid:xx]
         str_repr = (f'{self.__class__.__name__}'
                     f'[{self._state}'
+                    f'|seq:{self._seq}'
                     f'|id:{self._user_id}'
                     f'|lid:{self._user_logic_id}'
                     f'|sid:{self.session.session_id if self.session is not None else -1}]')

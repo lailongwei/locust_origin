@@ -9,6 +9,8 @@ class TeddyUserMgr:
     """
     def __init__(self):
         self._user_ids: List[int] = []
+
+        self._seq_2_users = {}
         self._user_id_2_users = {}
         self._user_name_2_users = {}
         self._user_logic_id_2_users = {}
@@ -16,6 +18,10 @@ class TeddyUserMgr:
     @property
     def user_ids(self) -> List[int]:
         return self._user_ids
+
+    @property
+    def seq_2_users(self):
+        return self._seq_2_users
 
     @property
     def user_id_2_users(self):
@@ -40,12 +46,14 @@ class TeddyUserMgr:
 
     def _on_user_start(self, user):
         self._user_ids.append(user.user_id)
+        self._seq_2_users[user.seq] = user
         self._user_id_2_users[user.user_id] = user
         teddy_logger.info(f'Add user: {user}')
 
     def _on_user_stop(self, user):
         teddy_logger.info(f'Remove user: {user}')
         self._user_ids.remove(user.user_id)
+        del self._seq_2_users[user.seq]
         del self._user_id_2_users[user.user_id]
         self.__remove_user_from_logic_id_dict(user.user_logic_id, user.user_id)
 

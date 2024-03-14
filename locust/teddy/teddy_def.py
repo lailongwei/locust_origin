@@ -91,18 +91,36 @@ class TeddyTaskSetType(Enum):
     默认调度策略: TeddyTaskScheduleMode.Sequential
     """
 
-    Test = 2
+    Func = 2
     """
-    测试任务集
+    功能测试任务集
+    默认调度策略: TeddyTaskScheduleMode.Sequential
+    """
+
+    Coverage = 3
+    """
+    覆盖性测试任务集
     默认调度策略: TeddyTaskScheduleMode.Randomized
+    """
+
+    UserDefined1 = 4
+    """
+    用户自定义测试任务集1(交给用户来定义此任务集分类)
+    默认调度策略: TeddyTaskScheduleMode.Sequential
+    """
+
+    UserDefined2 = 5
+    """
+    用户自定义测试任务集2(交给用户来定义此任务集分类)
+    默认调度策略: TeddyTaskScheduleMode.Sequential
     """
 
     @classmethod
     def get_default_schedule_mode(cls, taskset_type: "TeddyTaskSetType") -> TeddyTaskScheduleMode:
         """获取指定taskset类型的默认调度模式"""
-        if taskset_type == cls.Test:
+        if taskset_type == cls.Coverage:
             return TeddyTaskScheduleMode.Randomized
-        else:  # Non-Test
+        else:  # Non-Coverage
             return TeddyTaskScheduleMode.Sequential
 
 

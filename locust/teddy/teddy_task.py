@@ -268,6 +268,10 @@ class TeddyTaskSet(TaskSet, metaclass=TeddyTaskSetMeta):
         teddy_info: TeddyInfo = cast(TeddyInfo, cur_task.teddy_info)
         teddy_info['fail'] = fail_desc
         teddy_info['stop_user_after_fail'] = stop_user_after_report
+
+        # Log
+        self.log(logging.ERROR if stop_user_after_report else logging.WARNING,
+                 f'Report fail, fail_desc: {fail_desc}, stop_user_after_report: {stop_user_after_report}')
     # endregion
 
     # region jump支持
