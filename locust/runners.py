@@ -120,6 +120,9 @@ class Runner:
         self.target_user_classes_count: Dict[str, int] = {}
         # target_user_count is set before the ramp-up/ramp-down occurs.
         self.target_user_count: int = 0
+
+        self.params: dict = {}
+
         self.custom_messages: Dict[str, Callable] = {}
 
         self._users_dispatcher: Optional[UsersDispatcher] = None
@@ -249,11 +252,11 @@ class Runner:
             % (json.dumps(user_classes_spawn_count), json.dumps(self.user_classes_count))
         )
 
-        def spawn(user_class: str, spawn_count: int) -> List[User]:
+        def spawn(user_class: str, spawn_count: int, params: dict) -> List[User]:
             n = 0
             new_users: List[User] = []
             while n < spawn_count:
-                new_user = self.user_classes_by_name[user_class](self.environment)
+                new_user = self.user_classes_by_name[user_class](self.environment, params)
                 new_user.start(self.user_greenlets)
                 new_users.append(new_user)
                 n += 1
@@ -264,7 +267,7 @@ class Runner:
 
         new_users: List[User] = []
         for user_class, spawn_count in user_classes_spawn_count.items():
-            new_users += spawn(user_class, spawn_count)
+            new_users += spawn(user_class, spawn_count, self.params)
 
         if wait:
             self.user_greenlets.join()
@@ -339,7 +342,7 @@ class Runner:
 
     @abstractmethod
     def start(
-        self, user_count: int, spawn_rate: float, wait: bool = False, user_classes: Optional[List[Type[User]]] = None
+        self, user_count: int, spawn_rate: float, params:dict, wait: bool = False, user_classes: Optional[List[Type[User]]] = None
     ) -> None:
         ...
 
@@ -478,12 +481,13 @@ class LocalRunner(Runner):
 
         self.environment.events.user_error.add_listener(on_user_error)
 
-    def _start(self, user_count: int, spawn_rate: float, wait: bool = False, user_classes: list = None) -> None:
+    def _start(self, user_count: int, spawn_rate: float, params: dict, wait: bool = False, user_classes: list = None) -> None:
         """
         Start running a load test
 
         :param user_count: Total number of users to start
         :param spawn_rate: Number of users to spawn per second
+        :param params: Optional parameters
         :param wait: If True calls to this method will block until all users are spawned.
                      If False (the default), a greenlet that spawns the users will be
                      started and the call to this method will return immediately.
@@ -491,6 +495,8 @@ class LocalRunner(Runner):
                              invoked with.
         """
         self.target_user_count = user_count
+
+        self.params = params
 
         if self.state != STATE_RUNNING and self.state != STATE_SPAWNING:
             self.stats.clear_all()
@@ -517,7 +523,7 @@ class LocalRunner(Runner):
 
         logger.info("Ramping to %d users at a rate of %.2f per second" % (user_count, spawn_rate))
 
-        cast(UsersDispatcher, self._users_dispatcher).new_dispatch(user_count, spawn_rate, user_classes)
+        cast(UsersDispatcher, self._users_dispatcher).new_dispatch(user_count, spawn_rate, params, user_classes)
 
         try:
             for dispatched_users in self._users_dispatcher:
@@ -560,7 +566,7 @@ class LocalRunner(Runner):
         self.environment.events.spawning_complete.fire(user_count=sum(self.target_user_classes_count.values()))
 
     def start(
-        self, user_count: int, spawn_rate: float, wait: bool = False, user_classes: Optional[List[Type[User]]] = None
+        self, user_count: int, spawn_rate: float, params: dict, wait: bool = False, user_classes: Optional[List[Type[User]]] = None
     ) -> None:
         if spawn_rate > 100:
             logger.warning(
@@ -571,7 +577,7 @@ class LocalRunner(Runner):
             # kill existing spawning_greenlet before we start a new one
             self.spawning_greenlet.kill(block=True)
         self.spawning_greenlet = self.greenlet.spawn(
-            lambda: self._start(user_count, spawn_rate, wait=wait, user_classes=user_classes)
+            lambda: self._start(user_count, spawn_rate, params=params, wait=wait, user_classes=user_classes)
         )
         self.spawning_greenlet.link_exception(greenlet_exception_handler)
 
@@ -751,11 +757,13 @@ class MasterRunner(DistributedRunner):
         return warning_emitted
 
     def start(
-        self, user_count: int, spawn_rate: float, wait=False, user_classes: Optional[List[Type[User]]] = None
+        self, user_count: int, spawn_rate: float, params: dict, wait=False, user_classes: Optional[List[Type[User]]] = None
     ) -> None:
         self.spawning_completed = False
 
         self.target_user_count = user_count
+
+        self.params = params
 
         num_workers = len(self.clients.ready) + len(self.clients.running) + len(self.clients.spawning)
         if not num_workers:
@@ -795,7 +803,7 @@ class MasterRunner(DistributedRunner):
         self.update_state(STATE_SPAWNING)
 
         self._users_dispatcher.new_dispatch(
-            target_user_count=user_count, spawn_rate=spawn_rate, user_classes=user_classes
+            target_user_count=user_count, spawn_rate=spawn_rate, params=params, user_classes=user_classes
         )
 
         try:
@@ -955,7 +963,7 @@ class MasterRunner(DistributedRunner):
                     if self._users_dispatcher is not None:
                         self._users_dispatcher.remove_worker(client)
                         if self.rebalancing_enabled() and self.state == STATE_RUNNING and self.spawning_completed:
-                            self.start(self.target_user_count, self.spawn_rate)
+                            self.start(self.target_user_count, self.spawn_rate, self.params)
                     if self.worker_count <= 0:
                         logger.info("The last worker went missing, stopping test.")
                         self.stop()
@@ -972,7 +980,7 @@ class MasterRunner(DistributedRunner):
                     # _users_dispatcher is set to none so that during redistribution the dead clients are not picked, alternative is to call self.stop() before start
                     self._users_dispatcher = None
                     # trigger redistribution after missing cclient removal
-                    self.start(user_count=self.target_user_count, spawn_rate=self.spawn_rate)
+                    self.start(user_count=self.target_user_count, spawn_rate=self.spawn_rate, params=self.params)
 
     def reset_connection(self) -> None:
         logger.info("Resetting RPC server and all worker connections.")
@@ -1039,12 +1047,12 @@ class MasterRunner(DistributedRunner):
                     self._users_dispatcher.add_worker(worker_node=self.clients[client_id])
                     if not self._users_dispatcher.dispatch_in_progress and self.state == STATE_RUNNING:
                         # TODO: Test this situation
-                        self.start(self.target_user_count, self.spawn_rate)
+                        self.start(self.target_user_count, self.spawn_rate, self.params)
                 logger.info(
                     f"Worker {client_id} (index {self.get_worker_index(client_id)}) reported as ready. {len(self.clients.ready + self.clients.running + self.clients.spawning)} workers connected."
                 )
                 if self.rebalancing_enabled() and self.state == STATE_RUNNING and self.spawning_completed:
-                    self.start(self.target_user_count, self.spawn_rate)
+                    self.start(self.target_user_count, self.spawn_rate, self.params)
                 # emit a warning if the worker's clock seem to be out of sync with our clock
                 # if abs(time() - msg.data["time"]) > 5.0:
                 #    warnings.warn("The worker node's clock seem to be out of sync. For the statistics to be correct the different locust servers need to have synchronized clocks.")
@@ -1058,7 +1066,7 @@ class MasterRunner(DistributedRunner):
                     self._users_dispatcher.remove_worker(client)
                     if not self._users_dispatcher.dispatch_in_progress and self.state == STATE_RUNNING:
                         # TODO: Test this situation
-                        self.start(self.target_user_count, self.spawn_rate)
+                        self.start(self.target_user_count, self.spawn_rate, self.params)
                 logger.info(
                     f"Worker {msg.node_id} (index {self.get_worker_index(client_id)}) reported that it has stopped, removing from running workers"
                 )
@@ -1073,7 +1081,7 @@ class MasterRunner(DistributedRunner):
                             self._users_dispatcher.add_worker(worker_node=c)
                             if not self._users_dispatcher.dispatch_in_progress and self.state == STATE_RUNNING:
                                 # TODO: Test this situation
-                                self.start(self.target_user_count, self.spawn_rate)
+                                self.start(self.target_user_count, self.spawn_rate, self.params)
                     c.state = client_state
                     c.cpu_usage = msg.data["current_cpu_usage"]
                     if not c.cpu_warning_emitted and c.cpu_usage > 90:
@@ -1106,7 +1114,7 @@ class MasterRunner(DistributedRunner):
                         self._users_dispatcher.remove_worker(client)
                         if not self._users_dispatcher.dispatch_in_progress and self.state == STATE_RUNNING:
                             # TODO: Test this situation
-                            self.start(self.target_user_count, self.spawn_rate)
+                            self.start(self.target_user_count, self.spawn_rate, self.params)
                     logger.info(
                         f"Worker {msg.node_id!r} (index {self.get_worker_index(msg.node_id)}) quit. {len(self.clients.ready)} workers ready."
                     )
@@ -1230,7 +1238,7 @@ class WorkerRunner(DistributedRunner):
         self.environment.events.user_error.add_listener(on_user_error)
 
     def start(
-        self, user_count: int, spawn_rate: float, wait: bool = False, user_classes: Optional[List[Type[User]]] = None
+        self, user_count: int, spawn_rate: float, params: dict, wait: bool = False, user_classes: Optional[List[Type[User]]] = None
     ) -> None:
         raise NotImplementedError("use start_worker")
 

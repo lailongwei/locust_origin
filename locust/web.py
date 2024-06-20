@@ -1,5 +1,6 @@
 from __future__ import annotations
 import csv
+import json
 import logging
 import os.path
 from functools import wraps
@@ -211,6 +212,14 @@ class WebUI:
                     user_count = int(value)
                 elif key == "spawn_rate":
                     spawn_rate = float(value)
+                elif key == "params":
+                    try:
+                        params = json.loads("{"+value+"}")
+                    except:
+                        err_msg = """"Valid optional parameters formats like : "patrol_type":1,"born_area_id":1111."""
+                        logger.error(err_msg)
+                        return jsonify({"success": False, "message": err_msg, "host": environment.host})
+
                 elif key == "host":
                     # Replace < > to guard against XSS
                     environment.host = str(request.form["host"]).replace("<", "").replace(">", "")
@@ -246,7 +255,7 @@ class WebUI:
                 self._swarm_greenlet = None
 
             if environment.runner is not None:
-                self._swarm_greenlet = gevent.spawn(environment.runner.start, user_count, spawn_rate)
+                self._swarm_greenlet = gevent.spawn(environment.runner.start, user_count, spawn_rate, params)
                 self._swarm_greenlet.link_exception(greenlet_exception_handler)
                 response_data = {
                     "success": True,
