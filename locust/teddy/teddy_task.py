@@ -771,7 +771,7 @@ def teddy_taskset(taskset_type: TeddyTaskSetType, /, *, taskset_desc: str | Type
             raise ValueError('Not allow repeatedly use @teddy_task/@teddy_taskset annotation')
         teddy_info: TeddyInfo = cast(TeddyInfo,
                                      {'teddy_type': TeddyType.TaskSet,
-                                      'name': taskset_cls.__class__.__name__,
+                                      'name': taskset_cls.__name__,
                                       'taskset_type': taskset_type})
         if taskset_desc:
             teddy_info['desc'] = taskset_desc
