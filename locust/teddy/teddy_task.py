@@ -160,6 +160,8 @@ class TeddyTaskSetMeta(TaskSetMeta):
 
 
 class TeddyTaskSet(TaskSet, metaclass=TeddyTaskSetMeta):
+    # 断线不抛出异常的taskset及task
+    _disconn_dont_throw_except_dict = {}
     # region __init__
     def __init__(self, top_taskset: TaskSet) -> None:
         super().__init__(top_taskset)
@@ -174,6 +176,18 @@ class TeddyTaskSet(TaskSet, metaclass=TeddyTaskSetMeta):
     def session(self) -> TeddySession:
         """获取session对象"""
         return cast(TeddySession, getattr(self.user, 'session'))
+
+    @property
+    def disconn_dont_throw_except_dict(self):
+        """获取断线不抛出异常的字典"""
+        return self._disconn_dont_throw_except_dict
+
+    @disconn_dont_throw_except_dict.setter
+    def disconn_dont_throw_except_dict(self, value: dict[str, set]):
+        for k, taskset in value.items():
+            self._disconn_dont_throw_except_dict[k] = self._disconn_dont_throw_except_dict.get(k, set())
+            for task in taskset:
+                self._disconn_dont_throw_except_dict[k].add(task)
     # endregion
 
     # region taskset事件方法定义
@@ -771,7 +785,7 @@ def teddy_taskset(taskset_type: TeddyTaskSetType, /, *, taskset_desc: str | Type
             raise ValueError('Not allow repeatedly use @teddy_task/@teddy_taskset annotation')
         teddy_info: TeddyInfo = cast(TeddyInfo,
                                      {'teddy_type': TeddyType.TaskSet,
-                                      'name': taskset_cls.__class__.__name__,
+                                      'name': taskset_cls.__name__,
                                       'taskset_type': taskset_type})
         if taskset_desc:
             teddy_info['desc'] = taskset_desc

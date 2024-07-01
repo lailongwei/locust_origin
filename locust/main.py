@@ -47,6 +47,7 @@ COMMON_OPTIONS = {
     "num_users": "users",
     "spawn_rate": "spawn-rate",
     "run_time": "run-time",
+    "params": "params",
 }
 
 
@@ -531,6 +532,8 @@ See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-numb
                 options.num_users = 1
             if options.spawn_rate is None:
                 options.spawn_rate = 1
+            if options.params is None:
+                options.params = {}
 
             # start the test
             if environment.shape_class:
@@ -542,7 +545,7 @@ See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-numb
                 finally:
                     stop_and_optionally_quit()
             else:
-                headless_master_greenlet = gevent.spawn(runner.start, options.num_users, options.spawn_rate)
+                headless_master_greenlet = gevent.spawn(runner.start, options.num_users, options.spawn_rate, options.params)
                 headless_master_greenlet.link_exception(greenlet_exception_handler)
 
         if options.run_time:
@@ -563,16 +566,16 @@ See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-numb
         input_listener_greenlet = gevent.spawn(
             input_listener(
                 {
-                    "w": lambda: runner.start(runner.user_count + 1, 100)
+                    "w": lambda: runner.start(runner.user_count + 1, 100, {})
                     if runner.state != "spawning"
                     else logging.warning("Already spawning users, can't spawn more right now"),
-                    "W": lambda: runner.start(runner.user_count + 10, 100)
+                    "W": lambda: runner.start(runner.user_count + 10, 100, {})
                     if runner.state != "spawning"
                     else logging.warning("Already spawning users, can't spawn more right now"),
-                    "s": lambda: runner.start(max(0, runner.user_count - 1), 100)
+                    "s": lambda: runner.start(max(0, runner.user_count - 1), 100, {})
                     if runner.state != "spawning"
                     else logging.warning("Spawning users, can't stop right now"),
-                    "S": lambda: runner.start(max(0, runner.user_count - 10), 100)
+                    "S": lambda: runner.start(max(0, runner.user_count - 10), 100, {})
                     if runner.state != "spawning"
                     else logging.warning("Spawning users, can't stop right now"),
                 },

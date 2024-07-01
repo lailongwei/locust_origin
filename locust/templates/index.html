@@ -80,11 +80,16 @@
                         <label for="spawn_rate">Spawn rate <span style="color:#8a8a8a;">(users started/second)</span></label>
                         <input type="text" name="spawn_rate" id="spawn_rate" class="val_disabled" value="-" disabled="disabled" title="Disabled for tests using LoadTestShape class"/><br>
                         <input type="hidden" name="spawn_rate" id="spawn_rate" value="0"/><br>
+                        <label for="params">Optional parameters <span style="color:#8a8a8a;"><br>(e.g. "patrol_type":1,"born_area_id":1111)</span></label>
+                        <input type="text" name="params" id="params" class="val_disabled" value="-" disabled="disabled" title="Disabled for tests using LoadTestShape class"/><br>
+                        <input type="hidden" name="params" id="params" value=""/><br>
                     {% else %}
                         <label for="user_count">Number of users <span style="color:#8a8a8a;">(peak concurrency)</span></label>
                         <input type="text" name="user_count" id="user_count" class="val" value="{{ num_users or "1" }}" onfocus="this.select()"/><br>
                         <label for="spawn_rate">Spawn rate <span style="color:#8a8a8a;">(users started/second)</span></label>
                         <input type="text" name="spawn_rate" id="spawn_rate" class="val" value="{{ spawn_rate or "1" }}" onfocus="this.select()"/><br>
+                        <label for="params">Optional parameters <span style="color:#8a8a8a;"><br>(e.g. "patrol_type":1,"born_area_id":1111)</span></label>
+                        <input type="text" name="params" id="params" class="val" value="{{ params or "" }}" onfocus="this.select()"/><br>
                     {% endif %}
                     <label for="host">
                         Host <span style="color:#8a8a8a;">(e.g. http://www.example.com)</span>
@@ -149,11 +154,15 @@
                         <input type="text" name="user_count" id="new_user_count" class="val_disabled"  value="-" disabled="disabled" title="Disabled for tests using LoadTestShape class"/><br>
                         <label for="spawn_rate">Spawn rate <span style="color:#8a8a8a;">(users added/stopped per second)</span></label>
                         <input type="text" name="spawn_rate" id="new_spawn_rate" class="val_disabled"  value="-" disabled="disabled" title="Disabled for tests using LoadTestShape class"/><br>
+                        <label for="params">Optional parameters <span style="color:#8a8a8a;"><br>(e.g. "patrol_type":1,"born_area_id":1111)</span></label>
+                        <input type="text" name="params" id="new_params" class="val_disabled"  value="-" disabled="disabled" title="Disabled for tests using LoadTestShape class"/><br>
                     {% else %}
                         <label for="new_user_count">Number of users (peak concurrency)</label>
                         <input type="text" name="user_count" id="new_user_count" class="val"  value="{{ num_users or "1" }}" onfocus="this.select()"/><br>
                         <label for="spawn_rate">Spawn rate <span style="color:#8a8a8a;">(users added/stopped per second)</span></label>
                         <input type="text" name="spawn_rate" id="new_spawn_rate" class="val"  value="{{ spawn_rate or "1" }}" onfocus="this.select()"/><br>
+                        <label for="params">Optional parameters <span style="color:#8a8a8a;"><br>(e.g. "patrol_type":1,"born_area_id":1111)</span></label>
+                        <input type="text" name="params" id="new_params" class="val" value="{{ params or "" }}" onfocus="this.select()"/><br>
                     {% endif %}
                     {% if hide_common_options %}
                         <button type="submit" disabled>Start swarming</button>

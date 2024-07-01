@@ -66,6 +66,8 @@ class UsersDispatcher(Iterator):
 
         self._spawn_rate: float = None
 
+        self._params: dict = {}
+
         self._user_count_per_dispatch_iteration: int = None
 
         self._wait_between_dispatch: float = None
@@ -164,14 +166,17 @@ class UsersDispatcher(Iterator):
 
         self._dispatch_in_progress = False
 
-    def new_dispatch(self, target_user_count: int, spawn_rate: float, user_classes: Optional[List] = None) -> None:
+    def new_dispatch(self, target_user_count: int, spawn_rate: float, params: dict = None, user_classes: Optional[List] = None) -> None:
         """
         Initialize a new dispatch cycle.
 
         :param target_user_count: The desired user count at the end of the dispatch cycle
         :param spawn_rate: The spawn rate
+        :param params: The optional parameters
         :param user_classes: The user classes to be used for the new dispatch
         """
+        if params is None:
+            params = {}
         if user_classes is not None and self._user_classes != sorted(user_classes, key=attrgetter("__name__")):
             self._user_classes = sorted(user_classes, key=attrgetter("__name__"))
             self._user_generator = self._user_gen()
@@ -179,6 +184,8 @@ class UsersDispatcher(Iterator):
         self._target_user_count = target_user_count
 
         self._spawn_rate = spawn_rate
+
+        self._params = params
 
         self._user_count_per_dispatch_iteration = max(1, math.floor(self._spawn_rate))
 
